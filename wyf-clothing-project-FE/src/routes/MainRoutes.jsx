@@ -13,10 +13,13 @@ const ShopBlog = lazy(() => import('../views/dashboard/shop-blog'));
 
 //Admin
 const AddProduct = lazy(() => import('../views/admin/add-product'));
+const AdminAllProduct = lazy(() => import('../views/admin/admin-product'));
+
 const AddCollection = lazy(() => import('../views/admin/add-collection'))
 const AddSetup = lazy(() => import('../views/admin/add-setup'));
 const AddBlog = lazy(() => import('../views/admin/add-blog'));
 const AddDashboard = lazy(() => import('../views/admin/add-dashboard'))
+const Admin = lazy(() => import('../views/admin/admin'));
 
 //Shop
 const AllProduct = lazy(() => import('../views/shop/all-products'));
@@ -88,6 +91,14 @@ const MainRoutes = {
         {
             path: '/product',
             element: withSpinner(<Product />)
+        },
+        {
+            path: '/admin-panel',
+            element: withSpinner(<Admin />)
+        },
+        {
+            path: '/admin/admin-all-product',
+            element: withSpinner(<AdminAllProduct />)
         }
 
 

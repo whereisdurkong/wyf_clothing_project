@@ -398,6 +398,7 @@
 //     );
 // }
 
+////////////////////////////////////////////////////
 
 import { FiUser, FiShoppingBag, FiMenu, FiX } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
@@ -621,7 +622,8 @@ export default function Navbar() {
                                 transform: shopOpen ? 'translateY(0)' : 'translateY(-6px)',
                                 transition: 'max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, transform 0.28s ease',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                                overflow: 'hidden',
+                                overflow: 'visible',   // ← allows flyout to escape
+                                visibility: shopOpen ? 'visible' : 'hidden',  // ← replaces maxHeight clipping
                             }}>
                                 <div style={{
                                     height: '3px',
@@ -968,35 +970,52 @@ function DropdownItem({ item, index, visible }) {
                 )}
             </a>
 
-            {hasSubItems && (
-                <div style={{
-                    position: 'absolute',
-                    top: '-3px',
-                    left: '100%',
-                    width: '200px',
-                    background: '#ffffff',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                    pointerEvents: subOpen ? 'all' : 'none',
-                    opacity: subOpen ? 1 : 0,
-                    transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
-                    transition: 'opacity 0.22s ease, transform 0.22s ease',
-                    overflow: 'hidden',
-                }}>
+            {/* 👇 ADD THIS BRIDGE - fills the gap between the item and the submenu */}
+            {
+                hasSubItems && (
                     <div style={{
-                        height: '3px',
-                        background: '#000000',
-                        width: subOpen ? '100%' : '0%',
-                        transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
-                        transitionDelay: '0.05s',
+                        position: 'absolute',
+                        top: 0,
+                        left: '100%',
+                        width: '12px',
+                        height: '100%',
+                        background: 'transparent',
+                        pointerEvents: 'all',
                     }} />
-                    <div style={{ padding: '14px 0 18px' }}>
-                        {item.subItems.map((sub, si) => (
-                            <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
-                        ))}
+                )
+            }
+
+            {
+                hasSubItems && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '-3px',
+                        left: '100%',          // ← keep as-is
+                        width: '200px',
+                        background: '#ffffff',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                        pointerEvents: subOpen ? 'all' : 'none',
+                        opacity: subOpen ? 1 : 0,
+                        transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
+                        transition: 'opacity 0.22s ease, transform 0.22s ease',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            height: '3px',
+                            background: '#000000',
+                            width: subOpen ? '100%' : '0%',
+                            transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
+                            transitionDelay: '0.05s',
+                        }} />
+                        <div style={{ padding: '14px 0 18px' }}>
+                            {item.subItems.map((sub, si) => (
+                                <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 

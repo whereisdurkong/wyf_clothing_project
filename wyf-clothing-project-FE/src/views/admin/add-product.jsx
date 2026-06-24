@@ -79,11 +79,7 @@ function validateForm(form, variants) {
         } else if (isNaN(parseFloat(v.price)) || parseFloat(v.price) <= 0) {
             ve.price = "Price must be greater than 0.";
         }
-        if (!v.sale_price) {
-            ve.sale_price = "Sale price is required.";
-        } else if (isNaN(parseFloat(v.sale_price)) || parseFloat(v.sale_price) < 0) {
-            ve.sale_price = "Sale price must be 0 or greater.";
-        }
+
         // Validate that sale price is less than regular price
         if (v.price && v.sale_price && parseFloat(v.sale_price) >= parseFloat(v.price)) {
             ve.sale_price = "Sale price must be less than regular price.";
@@ -437,7 +433,8 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                     style={{ minWidth: "100%" }}
                 />
             </Field>
-            <Field label="Sale Price (₱)" required error={errors.sale_price}>
+            <Field label="Sale Price (₱)" error={errors.sale_price}>
+
                 <div style={{ position: "relative", width: "100%" }}>
                     <StyledInput
                         type="number"
