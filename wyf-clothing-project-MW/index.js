@@ -13,6 +13,14 @@ const PORT = process.env.PORT || 3000;
 
 // Serve static files from products folder
 
+// Log environment variables (without password!)
+console.log('📦 Environment loaded:');
+console.log('  SERVER:', process.env.SERVER);
+console.log('  DATABASE:', process.env.DATABASE);
+console.log('  USER:', process.env.USER);
+console.log('  PORT:', process.env.APP_SERVER_PORT || 'Using default');
+
+
 
 app.use(cors());
 app.use(express.json());

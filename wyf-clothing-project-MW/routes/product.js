@@ -6,6 +6,8 @@ require('dotenv').config();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+var Sequelize = require('sequelize');
+const { DataTypes } = Sequelize;
 
 // Ensure products directory exists (not uploads)
 const productsDir = path.join(__dirname, '../products');
@@ -96,7 +98,14 @@ const uploadSetup = multer({
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: fileFilter
 });
-
+// Helper function to sanitize filename for storage path
+function sanitizeFileName(productName) {
+    return productName
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '_')
+        .replace(/_+/g, '_')
+        .substring(0, 50);
+}
 
 var knex = require("knex")({
     client: 'mssql',
@@ -113,14 +122,84 @@ var knex = require("knex")({
     }
 });
 
-// Helper function to sanitize filename for storage path
-function sanitizeFileName(productName) {
-    return productName
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, '_')
-        .replace(/_+/g, '_')
-        .substring(0, 50);
-}
+var db = new Sequelize(process.env.DATABASE, process.env.USER, process.env.PASSWORD, {
+    host: process.env.SERVER,
+    dialect: "mssql",
+    port: parseInt(process.env.APP_SERVER_PORT),
+});
+
+
+const ProductMaster = db.define('product_master', {
+    product_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    product_name: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_description: {
+        type: DataTypes.TEXT,
+        allowNull: true
+    },
+    product_category: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_image_front: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_image_back: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_images: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    is_active: {
+        type: DataTypes.STRING(100),
+        allowNull: true
+    },
+    ratings: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    created_by: {
+        type: DataTypes.STRING(100),
+        allowNull: true
+    },
+    created_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        defaultValue: DataTypes.NOW
+    },
+    updated_by: {
+        type: DataTypes.STRING(100),
+        allowNull: true
+    },
+    updated_at: {
+        type: DataTypes.DATE,
+        allowNull: true
+    },
+    has_variants: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    },
+    product_collection: {
+        type: DataTypes.STRING(255),
+        allowNull: true
+    }
+}, {
+    freezeTableName: false,
+    timestamps: false,
+    createdAt: false,
+    updatedAt: false,
+    tableName: 'product_master'
+});
+
 
 // Update your POST route
 router.post('/add-product', upload.fields([
@@ -137,8 +216,6 @@ router.post('/add-product', upload.fields([
         product_description,
         product_category,
         product_collection,
-        product_price,
-        product_discount_price,
         has_variants,
         quantity,
         variants,
@@ -159,8 +236,8 @@ router.post('/add-product', upload.fields([
     const isVariant = has_variants === true || has_variants === "true" || has_variants === 1 || has_variants === "1";
 
     // Basic validation
-    if (!product_name || !product_category || product_price === undefined || product_price === null || product_price === "") {
-        return res.status(400).json({ message: 'product_name, product_category, and product_price are required.' });
+    if (!product_name || !product_category) {
+        return res.status(400).json({ message: 'product_name and product_category are required.' });
     }
 
     if (isVariant && (!parsedVariants || parsedVariants.length === 0)) {
@@ -174,14 +251,12 @@ router.post('/add-product', upload.fields([
     const now = new Date();
 
     try {
-        // First, insert product to get the product_id
+        // First, insert product to get the product_id (without price fields)
         const [product] = await knex('product_master').insert({
             product_name,
             product_description,
             product_category,
-            product_price,
-            product_collection,
-            product_discount_price: product_discount_price || null,
+            product_collection: product_collection || null,
             has_variants: isVariant,
             product_quantity: isVariant ? null : quantity,
             created_at: now,
@@ -203,7 +278,6 @@ router.post('/add-product', upload.fields([
             const newFilename = `product_image_front_${productId}_${sanitizeFileName(product_name)}${ext}`;
             const newPath = path.join(productsDir, newFilename);
 
-            // Rename file to include product ID
             fs.renameSync(file.path, newPath);
             productImageFront = `/products/${newFilename}`;
         }
@@ -247,9 +321,10 @@ router.post('/add-product', upload.fields([
         if (isVariant && parsedVariants.length > 0) {
             const variantRows = parsedVariants.map(v => ({
                 product_id: productId,
-                product_variant_type: v.type,
-                product_variant_size: v.size,
-                product_variant_quantity: v.quantity,
+                product_variant_size: v.product_variant_size || v.size,
+                product_variant_quantity: parseInt(v.product_variant_quantity || v.quantity) || 0,
+                product_variant_price: parseFloat(v.product_variant_price || v.price) || 0,
+                product_variant_sale_price: parseFloat(v.product_variant_sale_price || v.sale_price) || 0,
                 created_at: now,
                 created_by: created_by,
             }));
@@ -293,6 +368,25 @@ router.get('/get-all-product-variant', async (req, res, next) => {
         console.log('Unable to fetch all product: ', err)
     }
 })
+
+
+
+router.get('/get-product-by-id', async (req, res, next) => {
+    try {
+        console.log('+++++++++++++++++++===', req.query.id)
+        const getById = await ProductMaster.findAll({
+            where: {
+                product_id: req.query.id
+            }
+        })
+        console.log(getById)
+        console.log('triggered /ticket-by-id')
+        res.json(getById[0])
+    } catch (err) {
+
+    }
+})
+
 router.post('/add-collection', uploadCollection.single('collection_image'), async (req, res, next) => {
     try {
         const { collection_title, collection_subtitle } = req.body;
@@ -350,6 +444,8 @@ router.get('/get-all-collection', async (req, res, next) => {
         console.log('Unable to fetch all collections: ', err)
     }
 })
+
+
 
 
 router.post('/add-setup', uploadSetup.fields([

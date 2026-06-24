@@ -6,7 +6,14 @@ import { useState, useRef, useEffect } from "react";
 import { Toast } from '../../components/Notification'
 import Loading from "../../components/Loading";
 
-const CATEGORIES = ["T-Shirt", "Hoodies & Jackets", "Bottoms", "Footwear", "Accessories", "Other"];
+const CATEGORIES = [
+    { value: "tshirt", label: "T-Shirt" },
+    { value: "hoodies_jackets", label: "Hoodies & Jackets" },
+    { value: "bottoms", label: "Bottoms" },
+    { value: "footwear", label: "Footwear" },
+    { value: "accessories", label: "Accessories" },
+    { value: "other", label: "Other" }
+];
 const SIZES = ["XS", "S", "M", "L", "XL", "XXL", "One Size", "N/A"];
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE_MB = 5;
@@ -43,7 +50,7 @@ function validateImageFile(file) {
     return null;
 }
 
-function validateForm(form, hasVariants, variants) {
+function validateForm(form, variants) {
     const errors = {};
 
     if (!form.product_name.trim()) {
@@ -58,56 +65,43 @@ function validateForm(form, hasVariants, variants) {
         errors.product_category = "Please select a category.";
     }
 
-    const price = parseFloat(form.product_price);
-    if (!form.product_price) {
-        errors.product_price = "Price is required.";
-    } else if (isNaN(price) || price <= 0) {
-        errors.product_price = "Price must be greater than 0.";
-    }
-
-    if (form.product_discount_price) {
-        const discountPrice = parseFloat(form.product_discount_price);
-        if (isNaN(discountPrice) || discountPrice <= 0) {
-            errors.product_discount_price = "Compare-at price must be greater than 0.";
-        } else if (!isNaN(price) && discountPrice >= price) {
-            errors.product_discount_price = "Compare-at price must be less than the regular price.";
+    // Validate variants - size, quantity, price, and sale price are required
+    const variantErrors = variants.map((v) => {
+        const ve = {};
+        if (!v.size) ve.size = "Size is required.";
+        if (v.quantity === "" || v.quantity === null) {
+            ve.quantity = "Quantity is required.";
+        } else if (isNaN(parseInt(v.quantity)) || parseInt(v.quantity) < 0) {
+            ve.quantity = "Must be 0 or more.";
         }
-    }
-
-    if (hasVariants === "no") {
-        if (form.quantity === "" || form.quantity === null || form.quantity === undefined) {
-            errors.quantity = "Quantity is required.";
-        } else if (isNaN(parseInt(form.quantity)) || parseInt(form.quantity) < 0) {
-            errors.quantity = "Quantity must be 0 or more.";
-        } else if (!Number.isInteger(Number(form.quantity))) {
-            errors.quantity = "Quantity must be a whole number.";
+        if (!v.price) {
+            ve.price = "Price is required.";
+        } else if (isNaN(parseFloat(v.price)) || parseFloat(v.price) <= 0) {
+            ve.price = "Price must be greater than 0.";
         }
-    }
-
-    if (hasVariants === "yes") {
-        const variantErrors = variants.map((v) => {
-            const ve = {};
-            if (!v.type.trim()) ve.type = "Variant type is required.";
-            if (v.quantity === "" || v.quantity === null) {
-                ve.quantity = "Quantity is required.";
-            } else if (isNaN(parseInt(v.quantity)) || parseInt(v.quantity) < 0) {
-                ve.quantity = "Must be 0 or more.";
-            }
-            return ve;
-        });
-
-        const seen = new Set();
-        variants.forEach((v, idx) => {
-            const key = `${v.type.trim().toLowerCase()}|${v.size}`;
-            if (v.type.trim() && seen.has(key)) {
-                variantErrors[idx].type = "Duplicate variant type + size combination.";
-            }
-            if (v.type.trim()) seen.add(key);
-        });
-
-        if (variantErrors.some(ve => Object.keys(ve).length > 0)) {
-            errors.variants = variantErrors;
+        if (!v.sale_price) {
+            ve.sale_price = "Sale price is required.";
+        } else if (isNaN(parseFloat(v.sale_price)) || parseFloat(v.sale_price) < 0) {
+            ve.sale_price = "Sale price must be 0 or greater.";
         }
+        // Validate that sale price is less than regular price
+        if (v.price && v.sale_price && parseFloat(v.sale_price) >= parseFloat(v.price)) {
+            ve.sale_price = "Sale price must be less than regular price.";
+        }
+        return ve;
+    });
+
+    // Check for duplicate sizes
+    const seen = new Set();
+    variants.forEach((v, idx) => {
+        if (v.size && seen.has(v.size)) {
+            variantErrors[idx].size = "Duplicate size combination.";
+        }
+        if (v.size) seen.add(v.size);
+    });
+
+    if (variantErrors.some(ve => Object.keys(ve).length > 0)) {
+        errors.variants = variantErrors;
     }
 
     return errors;
@@ -392,29 +386,30 @@ function MultiImageUpload({ files, onChange, error }) {
 }
 
 function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {} }) {
+    // Calculate discount percentage
+    const discountPercent = variant.price && variant.sale_price
+        ? Math.round((1 - parseFloat(variant.sale_price) / parseFloat(variant.price)) * 100)
+        : 0;
+
     return (
         <div style={{
             display: "grid",
-            gridTemplateColumns: "1fr 1fr 1fr auto",
-            gap: 10,
+            gridTemplateColumns: "1.2fr 1fr 1.2fr 1.2fr auto",
+            gap: 12,
             alignItems: "end",
             background: "#f9fafb",
             border: `1px solid ${Object.keys(errors).length ? "#d82c0d" : "#e1e3e5"}`,
-            borderRadius: 6,
-            padding: 12,
-            marginBottom: 8,
+            borderRadius: 8,
+            padding: 16,
+            marginBottom: 10,
         }}>
-            <Field label="Variant type" error={errors.type}>
-                <StyledInput
-                    type="text"
-                    placeholder="Color, Flavor…"
-                    value={variant.type}
-                    hasError={!!errors.type}
-                    onChange={e => onChange(index, "type", e.target.value)}
-                />
-            </Field>
-            <Field label="Size">
-                <StyledSelect value={variant.size} onChange={e => onChange(index, "size", e.target.value)}>
+            <Field label="Size" required error={errors.size}>
+                <StyledSelect
+                    value={variant.size}
+                    onChange={e => onChange(index, "size", e.target.value)}
+                    hasError={!!errors.size}
+                    style={{ minWidth: "100%" }}
+                >
                     <option value="">— Size —</option>
                     {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
                 </StyledSelect>
@@ -427,7 +422,50 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                     value={variant.quantity}
                     hasError={!!errors.quantity}
                     onChange={e => onChange(index, "quantity", e.target.value)}
+                    style={{ minWidth: "100%" }}
                 />
+            </Field>
+            <Field label="Price (₱)" required error={errors.price}>
+                <StyledInput
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={variant.price}
+                    hasError={!!errors.price}
+                    onChange={e => onChange(index, "price", e.target.value)}
+                    style={{ minWidth: "100%" }}
+                />
+            </Field>
+            <Field label="Sale Price (₱)" required error={errors.sale_price}>
+                <div style={{ position: "relative", width: "100%" }}>
+                    <StyledInput
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={variant.sale_price}
+                        hasError={!!errors.sale_price}
+                        onChange={e => onChange(index, "sale_price", e.target.value)}
+                        style={{ minWidth: "100%" }}
+                    />
+                    {discountPercent > 0 && (
+                        <span style={{
+                            position: "absolute",
+                            right: 8,
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: "#2e6b2e",
+                            background: "#e8f5e9",
+                            padding: "2px 10px",
+                            borderRadius: 4,
+                        }}>
+                            -{discountPercent}%
+                        </span>
+                    )}
+                </div>
             </Field>
             <RemoveButton onClick={() => onRemove(index)} disabled={!canRemove} />
         </div>
@@ -448,17 +486,18 @@ function RemoveButton({ onClick, disabled }) {
                 border: `1px solid ${hovered && !disabled ? "#d82c0d" : "#e1e3e5"}`,
                 color: hovered && !disabled ? "#d82c0d" : "#8c9196",
                 borderRadius: 6,
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: disabled ? "not-allowed" : "pointer",
-                fontSize: 18,
+                fontSize: 20,
                 alignSelf: "end",
                 transition: "all .15s",
                 opacity: disabled ? 0.3 : 1,
                 fontFamily: "inherit",
+                marginBottom: 2,
             }}
         >
             ×
@@ -488,9 +527,8 @@ export default function AddProduct() {
     const empInfo = JSON.parse(localStorage.getItem('user')) || {};
     const userInfo = empInfo.user || {};
     const [collections, setCollections] = useState([]);
-    const [hasVariants, setHasVariants] = useState("no");
     const [variants, setVariants] = useState([
-        { id: Date.now(), type: "", size: "", quantity: "" },
+        { id: Date.now(), size: "", quantity: "", price: "", sale_price: "" },
     ]);
     const [submitted, setSubmitted] = useState(false);
     const [errors, setErrors] = useState({});
@@ -533,7 +571,6 @@ export default function AddProduct() {
         setTouched(prev => ({ ...prev, [name]: true }));
         const fieldErrors = validateForm(
             { ...form, [name]: e.target.value },
-            hasVariants,
             variants
         );
         setErrors(prev => ({ ...prev, [name]: fieldErrors[name] }));
@@ -551,20 +588,14 @@ export default function AddProduct() {
     };
 
     const addVariant = () => {
-        setVariants(vs => [...vs, { id: Date.now(), type: "", size: "", quantity: "" }]);
+        setVariants(vs => [...vs, { id: Date.now(), size: "", quantity: "", price: "", sale_price: "" }]);
     };
 
     const removeVariant = (index) => {
         if (variants.length > 1) setVariants(vs => vs.filter((_, i) => i !== index));
     };
 
-    const totalQty = hasVariants === "yes"
-        ? variants.reduce((s, v) => s + (parseInt(v.quantity) || 0), 0)
-        : (parseInt(form.quantity) || 0);
-
-    const discount = form.product_price && form.product_discount_price
-        ? Math.round((1 - form.product_discount_price / form.product_price) * 100)
-        : null;
+    const totalQty = variants.reduce((s, v) => s + (parseInt(v.quantity) || 0), 0);
 
     // ── Image handlers ──
 
@@ -586,7 +617,7 @@ export default function AddProduct() {
     // ── Submit ──
 
     const handleSubmit = async () => {
-        const validationErrors = validateForm(form, hasVariants, variants);
+        const validationErrors = validateForm(form, variants);
         setErrors(validationErrors);
         setIsLoading(true);
 
@@ -611,29 +642,84 @@ export default function AddProduct() {
             formData.append("product_name", form.product_name);
             formData.append("product_description", form.product_description);
             formData.append("product_category", form.product_category);
-            formData.append("product_price", form.product_price);
-            formData.append("product_discount_price", form.product_discount_price || "");
             formData.append("created_by", userInfo.name || "");
-            formData.append("has_variants", hasVariants === "yes" ? "true" : "false");
+            formData.append("has_variants", "true");
             formData.append("product_collection", form.collection || "");
 
-            if (hasVariants === "yes") {
-                // Serialize variants array as JSON string; backend will JSON.parse it
-                formData.append("variants", JSON.stringify(
-                    variants.map(({ type, size, quantity }) => ({
-                        type,
-                        size,
-                        quantity: parseInt(quantity) || 0,
-                    }))
-                ));
-            } else {
-                formData.append("quantity", form.quantity);
-            }
+            // Serialize variants array as JSON string - now with size, quantity, price, and sale_price
+            const variantsData = variants.map(({ size, quantity, price, sale_price }) => ({
+                product_variant_size: size,
+                product_variant_quantity: parseInt(quantity) || 0,
+                product_variant_price: parseFloat(price) || 0,
+                product_variant_sale_price: parseFloat(sale_price) || 0,
+            }));
+
+            formData.append("variants", JSON.stringify(variantsData));
 
             // Image files (only if selected)
             if (imageFront.file) formData.append("product_image_front", imageFront.file);
             if (imageBack.file) formData.append("product_image_back", imageBack.file);
             extraImages.forEach(entry => formData.append("product_images", entry.file));
+
+            // ─── CONSOLE LOGGING ──────────────────────────────────────────
+            console.log("📦 PRODUCT DATA BEING SENT:");
+            console.log("─────────────────────────────");
+
+            // Log form data as object
+            const formDataObject = {
+                product_id: form.product_id,
+                product_name: form.product_name,
+                product_description: form.product_description,
+                product_category: form.product_category,
+                created_by: userInfo.name || "",
+                has_variants: "true",
+                product_collection: form.collection || "",
+                variants: variantsData,
+            };
+            console.log("📝 Form Data:", formDataObject);
+
+            // Log image files
+            console.log("🖼️ Images:");
+            if (imageFront.file) {
+                console.log("  - Front image:", {
+                    name: imageFront.file.name,
+                    size: imageFront.file.size,
+                    type: imageFront.file.type
+                });
+            } else {
+                console.log("  - Front image: None");
+            }
+
+            if (imageBack.file) {
+                console.log("  - Back image:", {
+                    name: imageBack.file.name,
+                    size: imageBack.file.size,
+                    type: imageBack.file.type
+                });
+            } else {
+                console.log("  - Back image: None");
+            }
+
+            if (extraImages.length > 0) {
+                console.log("  - Extra images:", extraImages.map(img => ({
+                    name: img.file.name,
+                    size: img.file.size,
+                    type: img.file.type
+                })));
+            } else {
+                console.log("  - Extra images: None");
+            }
+
+            // Log FormData entries (for debugging multipart)
+            console.log("📋 FormData entries:");
+            for (let pair of formData.entries()) {
+                if (pair[1] instanceof File) {
+                    console.log(`  ${pair[0]}: [File] ${pair[1].name} (${pair[1].size} bytes)`);
+                } else {
+                    console.log(`  ${pair[0]}: ${pair[1]}`);
+                }
+            }
+            console.log("─────────────────────────────");
 
             await axios.post(`${config.baseApi}/product/add-product`, formData, {
                 headers: { "Content-Type": "multipart/form-data" },
@@ -646,7 +732,8 @@ export default function AddProduct() {
             setTimeout(() => { window.location.reload(); }, 2000);
         } catch (err) {
             setIsLoading(false);
-            console.log("Unable to save product!", err);
+            console.error("❌ Error saving product:", err);
+            console.error("Response:", err.response?.data);
             addNotif("Save failed", "Something went wrong. Please try again.", "error");
         }
 
@@ -663,10 +750,8 @@ export default function AddProduct() {
             product_discount_price: "",
             collection: "",
             quantity: "",
-            collection: "",
         }));
-        setVariants([{ id: Date.now(), type: "", size: "", quantity: "" }]);
-        setHasVariants("no");
+        setVariants([{ id: Date.now(), size: "", quantity: "", price: "", sale_price: "" }]);
         setErrors({});
         setTouched({});
 
@@ -772,51 +857,10 @@ export default function AddProduct() {
                             />
                         </Card>
 
-                        {/* Pricing card */}
-                        <Card title="Pricing">
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px 20px" }}>
-                                <Field label="Price (₱)" required error={errors.product_price}>
-                                    <StyledInput
-                                        type="number" min="0" step="0.01"
-                                        name="product_price"
-                                        value={form.product_price}
-                                        onChange={handleForm}
-                                        onBlur={handleBlur}
-                                        hasError={!!errors.product_price}
-                                        placeholder="0.00"
-                                    />
-                                </Field>
-                                <Field label="Compare-at price (₱)" error={errors.product_discount_price}>
-                                    <StyledInput
-                                        type="number" min="0" step="0.01"
-                                        name="product_discount_price"
-                                        value={form.product_discount_price}
-                                        onChange={handleForm}
-                                        onBlur={handleBlur}
-                                        hasError={!!errors.product_discount_price}
-                                        placeholder="0.00"
-                                    />
-                                </Field>
-                            </div>
-                            <p style={{ fontSize: 12, color: "#6d7175", margin: "4px 0 0" }}>
-                                To show a reduced price, move the original price to Compare-at price.
-                            </p>
-                            {discount !== null && discount > 0 && (
-                                <div style={{
-                                    display: "flex", alignItems: "center", justifyContent: "space-between",
-                                    background: "#f1f8f1", border: "1px solid #c9e8c9",
-                                    borderRadius: 6, padding: "10px 14px", marginTop: 4,
-                                }}>
-                                    <span style={{ fontSize: 13, color: "#2e6b2e" }}>Discount applied</span>
-                                    <strong style={{ fontSize: 15, color: "#2e6b2e" }}>{discount}% OFF</strong>
-                                </div>
-                            )}
-                        </Card>
-
-                        {/* Inventory card */}
+                        {/* Variants card */}
                         <Card>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 12, borderBottom: "1px solid #e1e3e5" }}>
-                                <span style={{ fontSize: 14, fontWeight: 600, color: "#202223" }}>Inventory</span>
+                                <span style={{ fontSize: 14, fontWeight: 600, color: "#202223" }}>Variants</span>
                                 <span style={{
                                     display: "inline-flex", alignItems: "center", gap: 4,
                                     background: "#f6f6f7", border: "1px solid #e1e3e5",
@@ -827,50 +871,20 @@ export default function AddProduct() {
                                 </span>
                             </div>
 
-                            <Field label="Product type">
-                                <StyledSelect
-                                    value={hasVariants}
-                                    onChange={e => { setHasVariants(e.target.value); setErrors({}); }}
-                                >
-                                    <option value="no">No variants — single quantity</option>
-                                    <option value="yes">Has variants (size, color, etc.)</option>
-                                </StyledSelect>
-                            </Field>
-
-                            {hasVariants === "no" && (
-                                <div style={{ background: "#f9fafb", border: "1px solid #e1e3e5", borderRadius: 6, padding: 16 }}>
-                                    <Field label="Quantity" required error={errors.quantity}>
-                                        <StyledInput
-                                            type="number"
-                                            min="0"
-                                            name="quantity"
-                                            value={form.quantity}
-                                            onChange={handleForm}
-                                            onBlur={handleBlur}
-                                            hasError={!!errors.quantity}
-                                            placeholder="0"
-                                            style={{ maxWidth: 180 }}
-                                        />
-                                    </Field>
-                                </div>
-                            )}
-
-                            {hasVariants === "yes" && (
-                                <div>
-                                    {variants.map((v, idx) => (
-                                        <VariantRow
-                                            key={v.id}
-                                            variant={v}
-                                            index={idx}
-                                            onChange={handleVariant}
-                                            onRemove={removeVariant}
-                                            canRemove={variants.length > 1}
-                                            errors={(errors.variants && errors.variants[idx]) || {}}
-                                        />
-                                    ))}
-                                    <AddVariantButton onClick={addVariant} />
-                                </div>
-                            )}
+                            <div>
+                                {variants.map((v, idx) => (
+                                    <VariantRow
+                                        key={v.id}
+                                        variant={v}
+                                        index={idx}
+                                        onChange={handleVariant}
+                                        onRemove={removeVariant}
+                                        canRemove={variants.length > 1}
+                                        errors={(errors.variants && errors.variants[idx]) || {}}
+                                    />
+                                ))}
+                                <AddVariantButton onClick={addVariant} />
+                            </div>
                         </Card>
                     </div>
 
@@ -913,7 +927,11 @@ export default function AddProduct() {
                                     hasError={!!errors.product_category}
                                 >
                                     <option value="">— Select —</option>
-                                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                                    {CATEGORIES.map(c => (
+                                        <option key={c.value} value={c.value}>
+                                            {c.label}
+                                        </option>
+                                    ))}
                                 </StyledSelect>
                             </Field>
                         </Card>
@@ -973,10 +991,15 @@ function AddVariantButton({ onClick }) {
                 background: hovered ? "#f6f6f7" : "none",
                 border: "1px dashed #8c9196",
                 color: hovered ? "#202223" : "#6d7175",
-                borderRadius: 6, padding: "9px 20px",
-                cursor: "pointer", fontFamily: "inherit",
-                fontSize: 13, fontWeight: 500, width: "100%",
-                transition: "all 0.15s", marginTop: 4,
+                borderRadius: 6,
+                padding: "10px 20px",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                fontSize: 13,
+                fontWeight: 500,
+                width: "100%",
+                transition: "all 0.15s",
+                marginTop: 6,
             }}
         >
             + Add variant

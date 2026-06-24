@@ -20,7 +20,7 @@ const AddDashboard = lazy(() => import('../views/admin/add-dashboard'))
 
 //Shop
 const AllProduct = lazy(() => import('../views/shop/all-products'));
-
+const Product = lazy(() => import('../views/shop/product'));
 
 const LoadingSpinner = <div>Loading...</div>;
 const withSpinner = (Component) => <Suspense fallback={LoadingSpinner}>{Component}</Suspense>;
@@ -84,7 +84,13 @@ const MainRoutes = {
         {
             path: '/all-product',
             element: withSpinner(<AllProduct />)
+        },
+        {
+            path: '/product',
+            element: withSpinner(<Product />)
         }
+
+
     ]
 };
 
