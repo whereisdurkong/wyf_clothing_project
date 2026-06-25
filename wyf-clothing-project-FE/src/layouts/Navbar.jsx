@@ -507,7 +507,7 @@ export default function Navbar() {
                 const res = await axios.get(`${config.baseApi}/product/get-all-collection`);
                 const data = res.data || [];
                 setCollections(data);
-                console.log(data);
+                // console.log(data);
             } catch (err) {
                 console.log('Unable to fetch all collections: ', err);
             }

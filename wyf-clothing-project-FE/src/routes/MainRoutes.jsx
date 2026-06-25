@@ -23,6 +23,8 @@ const AdminCollection = lazy(() => import('../views/admin/admin-collection'));
 const AdminCollectionView = lazy(() => import('../views/admin/admin-collection-view'));
 
 const AddBlog = lazy(() => import('../views/admin/add-blog'));
+const AdminBlog = lazy(() => import('../views/admin/admin-blog'));
+
 const AddDashboard = lazy(() => import('../views/admin/add-dashboard'))
 const Admin = lazy(() => import('../views/admin/admin'));
 
@@ -121,6 +123,10 @@ const MainRoutes = {
         {
             path: '/admin/admin-collection-view',
             element: withSpinner(<AdminCollectionView />)
+        },
+        {
+            path: '/admin/admin-blog',
+            element: withSpinner(<AdminBlog />)
         }
 
 

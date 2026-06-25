@@ -444,7 +444,7 @@ export default function AdminCollectionView() {
                 data.append("collection_images", image.file);
             }
 
-            await axios.put(`${config.baseApi}/product/update-collection`, data, {
+            await axios.post(`${config.baseApi}/product/update-collection`, data, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
 
@@ -462,10 +462,10 @@ export default function AdminCollectionView() {
             const msg = err.response?.data?.message || err.message || "Server error.";
             addNotif("Something went wrong!", msg, "error");
         } finally {
-            setTimeout(() => {
-                navigate('/admin/admin-collection')
-            }, 1500);
-
+            // setTimeout(() => {
+            //     navigate('/admin/admin-collection')
+            // }, 1500);
+            setLoading(false)
         }
     };
 

@@ -492,16 +492,17 @@ router.post('/update-product', upload.fields([
             return res.status(404).json({ message: 'Product not found.' });
         }
 
-        // ── Handle front image ───────────────────────────────────────
+        // ── Handle front image ───────────────────────────────────────────
         let productImageFront = current.product_image_front;
 
         if (req.files?.['product_image_front']?.[0]) {
+            // Delete old file from disk
             if (current.product_image_front) {
                 const oldPath = path.join(__dirname, '..', current.product_image_front);
                 if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             }
             const file = req.files['product_image_front'][0];
-            const ext = path.extname(file.filename);
+            const ext = path.extname(file.originalname);   // ← fix: use originalname
             const newFilename = `product_image_front_${product_id}_${sanitizeFileName(product_name)}${ext}`;
             const newPath = path.join(productsDir, newFilename);
             fs.renameSync(file.path, newPath);
@@ -514,16 +515,17 @@ router.post('/update-product', upload.fields([
             productImageFront = null;
         }
 
-        // ── Handle back image ────────────────────────────────────────
+        // ── Handle back image ────────────────────────────────────────────
         let productImageBack = current.product_image_back;
 
         if (req.files?.['product_image_back']?.[0]) {
+            // Delete old file from disk
             if (current.product_image_back) {
                 const oldPath = path.join(__dirname, '..', current.product_image_back);
                 if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
             }
             const file = req.files['product_image_back'][0];
-            const ext = path.extname(file.filename);
+            const ext = path.extname(file.originalname);   // ← fix: use originalname
             const newFilename = `product_image_back_${product_id}_${sanitizeFileName(product_name)}${ext}`;
             const newPath = path.join(productsDir, newFilename);
             fs.renameSync(file.path, newPath);
@@ -621,7 +623,7 @@ router.post('/update-product', upload.fields([
         console.log('INTERNAL ERROR: ', err);
         if (req.files) {
             Object.values(req.files).flat().forEach(file => {
-                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(oldPath);
+                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);  // ← fix: was `oldPath`
             });
         }
         return res.status(500).json({ message: 'Internal server error.', error: err.message });
@@ -697,7 +699,7 @@ router.get('/get-collection-by-id', async (req, res, next) => {
     console.log('triggered /collection-by-id')
     res.json(getbyId[0])
 })
-router.put('/update-collection', uploadCollection.single('collection_images'), async (req, res, next) => {
+router.post('/update-collection', uploadCollection.single('collection_images'), async (req, res, next) => {
     try {
         const { collection_id, collection_title, collection_subtitle, is_active } = req.body;
 
@@ -708,32 +710,42 @@ router.put('/update-collection', uploadCollection.single('collection_images'), a
             return res.status(400).json({ message: 'collection_title is required.' });
         }
 
-        // Fetch existing record
+        // 1. Fetch current record to get existing image path
         const current = await knex('product_collection_master')
             .where({ collection_id })
             .first();
 
         if (!current) {
+            // Clean up uploaded temp file if record doesn't exist
+            if (req.file?.path && fs.existsSync(req.file.path)) {
+                fs.unlinkSync(req.file.path);
+            }
             return res.status(404).json({ message: 'Collection not found.' });
         }
 
-        // Handle image — only update if a new file was uploaded
-        let imagePath = current.collection_images;
+        let imagePath = current.collection_images; // default: keep existing
 
         if (req.file) {
-            // Delete old image if it exists
+            // 2. Delete the old image from disk first
             if (current.collection_images) {
                 const oldPath = path.join(__dirname, '..', current.collection_images);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+                if (fs.existsSync(oldPath)) {
+                    fs.unlinkSync(oldPath);
+                    console.log(`Deleted old collection image: ${oldPath}`);
+                }
             }
 
-            const ext = path.extname(req.file.filename);
+            // 3. Rename temp upload to a clean, deterministic filename
+            const ext = path.extname(req.file.originalname); // use originalname for correct ext
             const newFilename = `collection_image_${collection_id}${ext}`;
             const newPath = path.join(collectionImagesDir, newFilename);
             fs.renameSync(req.file.path, newPath);
             imagePath = `/collectionImages/${newFilename}`;
+
+            console.log(`Saved new collection image: ${newPath}`);
         }
 
+        // 4. Update the DB record
         await knex('product_collection_master')
             .where({ collection_id })
             .update({
@@ -747,10 +759,12 @@ router.put('/update-collection', uploadCollection.single('collection_images'), a
         return res.status(200).json({
             message: 'Collection updated successfully.',
             collection_id,
+            collection_images: imagePath,
         });
 
     } catch (err) {
         console.error('Unable to update collection:', err);
+        // Clean up temp file on error
         if (req.file?.path && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
