@@ -1,89 +1,144 @@
 import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+
+const menuItems = [
+    { label: 'Product Manager', path: '/admin/admin-all-product', index: '01' },
+    { label: 'Category Images', path: '/admin-add-setup', index: '02' },
+    { label: 'Collection Manager', path: '/admin/collections', index: '03' },
+    { label: 'Blog', path: '/admin/blog', index: '04' },
+    { label: 'Dashboard Image', path: '/admin/dashboard-image', index: '05' },
+];
 
 export default function Admin() {
     const navigate = useNavigate();
-
-    const navigateTo = (path) => {
-        navigate(path);
-    };
+    const [hovered, setHovered] = useState(null);
 
     return (
-        <div className="min-h-screen bg-[#f5f5f5] flex items-center justify-center p-6 font-serif">
-            <div className="w-full max-w-lg">
-                {/* Minimal header */}
-                <div className="mb-12">
-                    <h1 className="text-6xl font-light text-black tracking-tight">/</h1>
-                    <p className="text-black/30 text-sm tracking-[0.2em] uppercase mt-1">dashboard</p>
+        <div style={{
+            minHeight: '100vh',
+            background: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '48px 24px',
+            fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+        }}>
+            <div style={{ width: '100%', maxWidth: '480px' }}>
+
+                {/* Header */}
+                <div style={{ marginBottom: '56px' }}>
+                    <div style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: '14px',
+                        marginBottom: '8px',
+                    }}>
+                        <span style={{
+                            fontSize: '11px',
+                            fontWeight: '600',
+                            letterSpacing: '0.18em',
+                            textTransform: 'uppercase',
+                            color: '#bbb',
+                        }}>Admin</span>
+                        <span style={{ color: '#e0e0e0', fontSize: '11px' }}>·</span>
+                        <span style={{
+                            fontSize: '11px',
+                            fontWeight: '400',
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                            color: '#ccc',
+                        }}>Control Panel</span>
+                    </div>
+                    <h1 style={{
+                        fontSize: '42px',
+                        fontWeight: '800',
+                        color: '#0a0a0a',
+                        letterSpacing: '-1.5px',
+                        lineHeight: 1,
+                        margin: 0,
+                        textTransform: 'uppercase',
+                    }}>Dashboard</h1>
                 </div>
 
-                {/* Buttons - clean, minimal, black & white */}
-                <div className="space-y-2">
-                    <button
-                        onClick={() => navigateTo('/admin/admin-all-product')}
-                        className="w-full text-left px-0 py-4 border-b border-black/10 hover:border-black/40 transition-colors group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-black/70 group-hover:text-black text-sm tracking-wide transition-colors">
-                                Product Manager
-                            </span>
-                            <span className="text-black/10 group-hover:text-black/30 transition-colors text-xs">⌘1</span>
-                        </div>
-                    </button>
+                {/* Menu */}
+                <nav>
+                    {menuItems.map((item) => {
+                        const isHovered = hovered === item.index;
+                        return (
+                            <button
+                                key={item.index}
+                                onClick={() => navigate(item.path)}
+                                onMouseEnter={() => setHovered(item.index)}
+                                onMouseLeave={() => setHovered(null)}
+                                style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    background: isHovered ? '#0a0a0a' : 'transparent',
+                                    border: 'none',
+                                    borderBottom: '1px solid #e8e8e8',
+                                    padding: '18px 20px 18px 0',
+                                    paddingLeft: isHovered ? '20px' : '0',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.18s ease',
+                                    textAlign: 'left',
+                                }}
+                            >
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+                                    <span style={{
+                                        fontFamily: "'SF Mono', 'Fira Code', monospace",
+                                        fontSize: '10px',
+                                        fontWeight: '500',
+                                        color: isHovered ? 'rgba(255,255,255,0.35)' : '#ccc',
+                                        letterSpacing: '0.05em',
+                                        transition: 'color 0.18s ease',
+                                        minWidth: '20px',
+                                    }}>{item.index}</span>
+                                    <span style={{
+                                        fontSize: '14px',
+                                        fontWeight: '500',
+                                        color: isHovered ? '#fff' : '#1a1a1a',
+                                        letterSpacing: '-0.1px',
+                                        transition: 'color 0.18s ease',
+                                    }}>{item.label}</span>
+                                </div>
+                                <svg
+                                    width="14"
+                                    height="14"
+                                    viewBox="0 0 14 14"
+                                    fill="none"
+                                    style={{
+                                        opacity: isHovered ? 1 : 0,
+                                        transform: isHovered ? 'translateX(0)' : 'translateX(-6px)',
+                                        transition: 'all 0.18s ease',
+                                    }}
+                                >
+                                    <path d="M1 7h12M8 2l5 5-5 5" stroke="#fff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
+                            </button>
+                        );
+                    })}
+                </nav>
 
-                    <button
-                        onClick={() => navigateTo('/admin/categories')}
-                        className="w-full text-left px-0 py-4 border-b border-black/10 hover:border-black/40 transition-colors group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-black/70 group-hover:text-black text-sm tracking-wide transition-colors">
-                                Setup-image per category
-                            </span>
-                            <span className="text-black/10 group-hover:text-black/30 transition-colors text-xs">⌘2</span>
-                        </div>
-                    </button>
-
-                    <button
-                        onClick={() => navigateTo('/admin/collections')}
-                        className="w-full text-left px-0 py-4 border-b border-black/10 hover:border-black/40 transition-colors group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-black/70 group-hover:text-black text-sm tracking-wide transition-colors">
-                                Collection Manager
-                            </span>
-                            <span className="text-black/10 group-hover:text-black/30 transition-colors text-xs">⌘3</span>
-                        </div>
-                    </button>
-
-                    <button
-                        onClick={() => navigateTo('/admin/blog')}
-                        className="w-full text-left px-0 py-4 border-b border-black/10 hover:border-black/40 transition-colors group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-black/70 group-hover:text-black text-sm tracking-wide transition-colors">
-                                Blog
-                            </span>
-                            <span className="text-black/10 group-hover:text-black/30 transition-colors text-xs">⌘4</span>
-                        </div>
-                    </button>
-
-                    <button
-                        onClick={() => navigateTo('/admin/dashboard-image')}
-                        className="w-full text-left px-0 py-4 border-b border-black/10 hover:border-black/40 transition-colors group"
-                    >
-                        <div className="flex items-center justify-between">
-                            <span className="text-black/70 group-hover:text-black text-sm tracking-wide transition-colors">
-                                Dashboard image
-                            </span>
-                            <span className="text-black/10 group-hover:text-black/30 transition-colors text-xs">⌘5</span>
-                        </div>
-                    </button>
-                </div>
-
-                {/* Subtle footer */}
-                <div className="mt-12 flex justify-between text-black/20 text-[10px] tracking-[0.15em] uppercase">
-                    <span>—</span>
-                    <span>minimal</span>
-                    <span>—</span>
+                {/* Footer */}
+                <div style={{
+                    marginTop: '48px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                }}>
+                    <span style={{
+                        fontSize: '10px',
+                        letterSpacing: '0.15em',
+                        textTransform: 'uppercase',
+                        color: '#d0d0d0',
+                    }}>{menuItems.length} modules</span>
+                    <div style={{
+                        width: '32px',
+                        height: '1px',
+                        background: '#0a0a0a',
+                    }} />
                 </div>
             </div>
         </div>

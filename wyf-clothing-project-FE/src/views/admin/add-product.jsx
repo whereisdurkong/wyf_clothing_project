@@ -65,7 +65,6 @@ function validateForm(form, variants) {
         errors.product_category = "Please select a category.";
     }
 
-    // Validate variants - size, quantity, price, and sale price are required
     const variantErrors = variants.map((v) => {
         const ve = {};
         if (!v.size) ve.size = "Size is required.";
@@ -80,14 +79,12 @@ function validateForm(form, variants) {
             ve.price = "Price must be greater than 0.";
         }
 
-        // Validate that sale price is less than regular price
         if (v.price && v.sale_price && parseFloat(v.sale_price) >= parseFloat(v.price)) {
             ve.sale_price = "Sale price must be less than regular price.";
         }
         return ve;
     });
 
-    // Check for duplicate sizes
     const seen = new Set();
     variants.forEach((v, idx) => {
         if (v.size && seen.has(v.size)) {
@@ -185,17 +182,6 @@ function StyledTextarea({ style, hasError, ...props }) {
 
 // ── Image Upload Components ─────────────────────────────────────────
 
-/**
- * Single image uploader with drag-and-drop and preview.
- * Props:
- *   label        – field label text
- *   required     – show red asterisk
- *   file         – current File | null
- *   preview      – object-URL string | null
- *   onChange     – (file, previewUrl) => void
- *   onClear      – () => void
- *   error        – error string | undefined
- */
 function SingleImageUpload({ label, required, file, preview, onChange, onClear, error }) {
     const inputRef = useRef(null);
     const [dragging, setDragging] = useState(false);
@@ -279,13 +265,6 @@ function SingleImageUpload({ label, required, file, preview, onChange, onClear, 
     );
 }
 
-/**
- * Multiple images uploader.
- * Props:
- *   files    – Array<{ file: File, preview: string }>
- *   onChange – (updatedFiles) => void
- *   error    – error string | undefined
- */
 function MultiImageUpload({ files, onChange, error }) {
     const inputRef = useRef(null);
     const [dragging, setDragging] = useState(false);
@@ -311,7 +290,6 @@ function MultiImageUpload({ files, onChange, error }) {
 
     return (
         <Field label="Additional images" error={error}>
-            {/* Drop zone */}
             <div
                 onClick={() => inputRef.current?.click()}
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
@@ -336,7 +314,6 @@ function MultiImageUpload({ files, onChange, error }) {
                 </p>
             </div>
 
-            {/* Thumbnails grid */}
             {files.length > 0 && (
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 8, marginTop: 4 }}>
                     {files.map((entry, idx) => (
@@ -382,7 +359,6 @@ function MultiImageUpload({ files, onChange, error }) {
 }
 
 function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {} }) {
-    // Calculate discount percentage
     const discountPercent = variant.price && variant.sale_price
         ? Math.round((1 - parseFloat(variant.sale_price) / parseFloat(variant.price)) * 100)
         : 0;
@@ -390,13 +366,13 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
     return (
         <div style={{
             display: "grid",
-            gridTemplateColumns: "1.2fr 1fr 1.2fr 1.2fr auto",
-            gap: 12,
+            gridTemplateColumns: "1.5fr 1fr 1.5fr 1.5fr auto",
+            gap: 16,
             alignItems: "end",
             background: "#f9fafb",
             border: `1px solid ${Object.keys(errors).length ? "#d82c0d" : "#e1e3e5"}`,
             borderRadius: 8,
-            padding: 16,
+            padding: "16px 20px",
             marginBottom: 10,
         }}>
             <Field label="Size" required error={errors.size}>
@@ -404,7 +380,6 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                     value={variant.size}
                     onChange={e => onChange(index, "size", e.target.value)}
                     hasError={!!errors.size}
-                    style={{ minWidth: "100%" }}
                 >
                     <option value="">— Size —</option>
                     {SIZES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -418,7 +393,6 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                     value={variant.quantity}
                     hasError={!!errors.quantity}
                     onChange={e => onChange(index, "quantity", e.target.value)}
-                    style={{ minWidth: "100%" }}
                 />
             </Field>
             <Field label="Price (₱)" required error={errors.price}>
@@ -430,11 +404,9 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                     value={variant.price}
                     hasError={!!errors.price}
                     onChange={e => onChange(index, "price", e.target.value)}
-                    style={{ minWidth: "100%" }}
                 />
             </Field>
             <Field label="Sale Price (₱)" error={errors.sale_price}>
-
                 <div style={{ position: "relative", width: "100%" }}>
                     <StyledInput
                         type="number"
@@ -444,7 +416,6 @@ function VariantRow({ variant, index, onChange, onRemove, canRemove, errors = {}
                         value={variant.sale_price}
                         hasError={!!errors.sale_price}
                         onChange={e => onChange(index, "sale_price", e.target.value)}
-                        style={{ minWidth: "100%" }}
                     />
                     {discountPercent > 0 && (
                         <span style={{
@@ -515,10 +486,9 @@ export default function AddProduct() {
         quantity: "",
     });
 
-    // ── Image state ──
     const [imageFront, setImageFront] = useState({ file: null, preview: null });
     const [imageBack, setImageBack] = useState({ file: null, preview: null });
-    const [extraImages, setExtraImages] = useState([]); // Array<{ file, preview }>
+    const [extraImages, setExtraImages] = useState([]);
     const [imageErrors, setImageErrors] = useState({ front: null, back: null, extra: null });
 
     const empInfo = JSON.parse(localStorage.getItem('user')) || {};
@@ -545,7 +515,6 @@ export default function AddProduct() {
         }
         fetch()
     }, [])
-
 
     const addNotif = (title, message, type) => {
         const id = Date.now();
@@ -594,8 +563,6 @@ export default function AddProduct() {
 
     const totalQty = variants.reduce((s, v) => s + (parseInt(v.quantity) || 0), 0);
 
-    // ── Image handlers ──
-
     const handleFrontChange = (file, preview, err) => {
         setImageFront({ file, preview });
         setImageErrors(e => ({ ...e, front: err }));
@@ -610,8 +577,6 @@ export default function AddProduct() {
         setExtraImages(updatedFiles);
         setImageErrors(e => ({ ...e, extra: err }));
     };
-
-    // ── Submit ──
 
     const handleSubmit = async () => {
         const validationErrors = validateForm(form, variants);
@@ -631,10 +596,8 @@ export default function AddProduct() {
         setSubmitted(true);
 
         try {
-            // Build multipart/form-data so images travel alongside JSON fields
             const formData = new FormData();
 
-            // Scalar fields
             formData.append("product_id", form.product_id);
             formData.append("product_name", form.product_name);
             formData.append("product_description", form.product_description);
@@ -643,7 +606,6 @@ export default function AddProduct() {
             formData.append("has_variants", "true");
             formData.append("product_collection", form.collection || "");
 
-            // Serialize variants array as JSON string - now with size, quantity, price, and sale_price
             const variantsData = variants.map(({ size, quantity, price, sale_price }) => ({
                 product_variant_size: size,
                 product_variant_quantity: parseInt(quantity) || 0,
@@ -653,70 +615,9 @@ export default function AddProduct() {
 
             formData.append("variants", JSON.stringify(variantsData));
 
-            // Image files (only if selected)
             if (imageFront.file) formData.append("product_image_front", imageFront.file);
             if (imageBack.file) formData.append("product_image_back", imageBack.file);
             extraImages.forEach(entry => formData.append("product_images", entry.file));
-
-            // ─── CONSOLE LOGGING ──────────────────────────────────────────
-            console.log("📦 PRODUCT DATA BEING SENT:");
-            console.log("─────────────────────────────");
-
-            // Log form data as object
-            const formDataObject = {
-                product_id: form.product_id,
-                product_name: form.product_name,
-                product_description: form.product_description,
-                product_category: form.product_category,
-                created_by: userInfo.name || "",
-                has_variants: "true",
-                product_collection: form.collection || "",
-                variants: variantsData,
-            };
-            console.log("📝 Form Data:", formDataObject);
-
-            // Log image files
-            console.log("🖼️ Images:");
-            if (imageFront.file) {
-                console.log("  - Front image:", {
-                    name: imageFront.file.name,
-                    size: imageFront.file.size,
-                    type: imageFront.file.type
-                });
-            } else {
-                console.log("  - Front image: None");
-            }
-
-            if (imageBack.file) {
-                console.log("  - Back image:", {
-                    name: imageBack.file.name,
-                    size: imageBack.file.size,
-                    type: imageBack.file.type
-                });
-            } else {
-                console.log("  - Back image: None");
-            }
-
-            if (extraImages.length > 0) {
-                console.log("  - Extra images:", extraImages.map(img => ({
-                    name: img.file.name,
-                    size: img.file.size,
-                    type: img.file.type
-                })));
-            } else {
-                console.log("  - Extra images: None");
-            }
-
-            // Log FormData entries (for debugging multipart)
-            console.log("📋 FormData entries:");
-            for (let pair of formData.entries()) {
-                if (pair[1] instanceof File) {
-                    console.log(`  ${pair[0]}: [File] ${pair[1].name} (${pair[1].size} bytes)`);
-                } else {
-                    console.log(`  ${pair[0]}: ${pair[1]}`);
-                }
-            }
-            console.log("─────────────────────────────");
 
             await axios.post(`${config.baseApi}/product/add-product`, formData, {
                 headers: { "Content-Type": "multipart/form-data" },
@@ -730,7 +631,6 @@ export default function AddProduct() {
         } catch (err) {
             setIsLoading(false);
             console.error("❌ Error saving product:", err);
-            console.error("Response:", err.response?.data);
             addNotif("Save failed", "Something went wrong. Please try again.", "error");
         }
 
@@ -752,7 +652,6 @@ export default function AddProduct() {
         setErrors({});
         setTouched({});
 
-        // Revoke object-URLs to avoid memory leaks
         if (imageFront.preview) URL.revokeObjectURL(imageFront.preview);
         if (imageBack.preview) URL.revokeObjectURL(imageBack.preview);
         extraImages.forEach(e => URL.revokeObjectURL(e.preview));
@@ -764,7 +663,7 @@ export default function AddProduct() {
     };
 
     return (
-        <div style={{ minHeight: "100vh", background: "#f1f2f4", color: "#202223", fontFamily: "'Inter',system-ui,sans-serif", padding: "24px", marginTop: '100px' }}>
+        <div style={{ minHeight: "100vh", background: "#f1f2f4", color: "#202223", fontFamily: "'Inter',system-ui,sans-serif", padding: "24px 32px", marginTop: '100px' }}>
             <style>{`
                 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
                 * { box-sizing: border-box; }
@@ -785,8 +684,8 @@ export default function AddProduct() {
                 ))}
             </div>
 
-            <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, alignItems: "start" }}>
+            <div style={{ maxWidth: 1400, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 20, alignItems: "start" }}>
 
                     {/* ── Main column ── */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -896,7 +795,6 @@ export default function AddProduct() {
                                     <option>Archived</option>
                                 </StyledSelect>
                             </Field>
-
                         </Card>
 
                         <Card title="Organization">

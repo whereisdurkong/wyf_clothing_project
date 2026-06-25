@@ -14,9 +14,14 @@ const ShopBlog = lazy(() => import('../views/dashboard/shop-blog'));
 //Admin
 const AddProduct = lazy(() => import('../views/admin/add-product'));
 const AdminAllProduct = lazy(() => import('../views/admin/admin-product'));
+const AdminProductView = lazy(() => import('../views/admin/admin-product-view'))
+
+const AddSetup = lazy(() => import('../views/admin/add-setup'));
 
 const AddCollection = lazy(() => import('../views/admin/add-collection'))
-const AddSetup = lazy(() => import('../views/admin/add-setup'));
+const AdminCollection = lazy(() => import('../views/admin/admin-collection'));
+const AdminCollectionView = lazy(() => import('../views/admin/admin-collection-view'));
+
 const AddBlog = lazy(() => import('../views/admin/add-blog'));
 const AddDashboard = lazy(() => import('../views/admin/add-dashboard'))
 const Admin = lazy(() => import('../views/admin/admin'));
@@ -24,6 +29,7 @@ const Admin = lazy(() => import('../views/admin/admin'));
 //Shop
 const AllProduct = lazy(() => import('../views/shop/all-products'));
 const Product = lazy(() => import('../views/shop/product'));
+const Collection = lazy(() => import('../views/shop/collection'))
 
 const LoadingSpinner = <div>Loading...</div>;
 const withSpinner = (Component) => <Suspense fallback={LoadingSpinner}>{Component}</Suspense>;
@@ -99,7 +105,24 @@ const MainRoutes = {
         {
             path: '/admin/admin-all-product',
             element: withSpinner(<AdminAllProduct />)
+        },
+        {
+            path: '/admin/admin-product-view',
+            element: withSpinner(<AdminProductView />)
+        },
+        {
+            path: '/admin/admin-collection',
+            element: withSpinner(<AdminCollection />)
+        },
+        {
+            path: '/collections',
+            element: withSpinner(<Collection />)
+        },
+        {
+            path: '/admin/admin-collection-view',
+            element: withSpinner(<AdminCollectionView />)
         }
+
 
 
     ]

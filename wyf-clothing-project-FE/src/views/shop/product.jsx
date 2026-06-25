@@ -726,6 +726,7 @@
 
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
+
 import { useEffect, useState, useRef } from "react";
 import config from "../../config";
 import FeatherIcon from 'feather-icons-react';
@@ -1332,7 +1333,7 @@ export default function Product() {
                         <div
                             style={{
                                 ...styles.mainImageWrap,
-                                height: "700px",
+                                height: "900px",
                                 marginTop: "40px",
                                 position: "relative",
                             }}

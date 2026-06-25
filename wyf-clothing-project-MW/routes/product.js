@@ -73,8 +73,6 @@ const uploadCollection = multer({
 });
 
 
-// Add this after the collectionImages setup (around line 60)
-
 // Ensure setupImages directory exists
 const setupImagesDir = path.join(__dirname, '../setupImages');
 if (!fs.existsSync(setupImagesDir)) {
@@ -98,6 +96,8 @@ const uploadSetup = multer({
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: fileFilter
 });
+
+
 // Helper function to sanitize filename for storage path
 function sanitizeFileName(productName) {
     return productName
@@ -201,7 +201,50 @@ const ProductMaster = db.define('product_master', {
 });
 
 
-// Update your POST route
+const CollectionMaster = db.define('product_collection_master', {
+    collection_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    collection_images: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    collection_title: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    collection_subtitle: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    created_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_by: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    is_active: {
+        type: DataTypes.STRING(100),
+        allowNull: true
+    },
+}, {
+    freezeTableName: false,
+    timestamps: false,
+    createdAt: false,
+    updatedAt: false,
+    tableName: 'product_collection_master'
+})
+
+
+// PRODUCTS
 router.post('/add-product', upload.fields([
     { name: 'product_image_front', maxCount: 1 },
     { name: 'product_image_back', maxCount: 1 },
@@ -369,8 +412,6 @@ router.get('/get-all-product-variant', async (req, res, next) => {
     }
 })
 
-
-
 router.get('/get-product-by-id', async (req, res, next) => {
     try {
         console.log('+++++++++++++++++++===', req.query.id)
@@ -380,13 +421,215 @@ router.get('/get-product-by-id', async (req, res, next) => {
             }
         })
         console.log(getById)
-        console.log('triggered /ticket-by-id')
+        console.log('triggered /product-by-id')
         res.json(getById[0])
     } catch (err) {
 
     }
 })
 
+router.post('/update-product', upload.fields([
+    { name: 'product_image_front', maxCount: 1 },
+    { name: 'product_image_back', maxCount: 1 },
+    { name: 'product_images', maxCount: 10 }
+]), async (req, res, next) => {
+    console.log('REQUEST BODY:', req.body);
+    console.log('REQUEST FILES:', req.files);
+
+    try {
+        const {
+            product_id,
+            product_name,
+            product_description,
+            product_category,
+            product_collection,
+            is_active,          // ← destructured correctly
+            has_variants,
+            variants,
+            existing_extra_images,
+            clear_image_front,
+            clear_image_back,
+        } = req.body;
+
+        // ── Validation ───────────────────────────────────────────────
+        if (!product_id) {
+            return res.status(400).json({ message: 'product_id is required.' });
+        }
+        if (!product_name || !product_category) {
+            return res.status(400).json({ message: 'product_name and product_category are required.' });
+        }
+
+        // ── Parse variants ───────────────────────────────────────────
+        let parsedVariants = [];
+        if (variants) {
+            try {
+                parsedVariants = typeof variants === 'string' ? JSON.parse(variants) : variants;
+            } catch (e) {
+                return res.status(400).json({ message: 'Invalid variants format.' });
+            }
+        }
+
+        // ── Parse kept extra images ──────────────────────────────────
+        let keptExtras = [];
+        if (existing_extra_images) {
+            try {
+                keptExtras = typeof existing_extra_images === 'string'
+                    ? JSON.parse(existing_extra_images)
+                    : existing_extra_images;
+            } catch (e) {
+                keptExtras = [];
+            }
+        }
+
+        const now = new Date();
+
+        // ── Fetch current product ────────────────────────────────────
+        const current = await knex('product_master')
+            .where({ product_id })
+            .first();
+
+        if (!current) {
+            return res.status(404).json({ message: 'Product not found.' });
+        }
+
+        // ── Handle front image ───────────────────────────────────────
+        let productImageFront = current.product_image_front;
+
+        if (req.files?.['product_image_front']?.[0]) {
+            if (current.product_image_front) {
+                const oldPath = path.join(__dirname, '..', current.product_image_front);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+            const file = req.files['product_image_front'][0];
+            const ext = path.extname(file.filename);
+            const newFilename = `product_image_front_${product_id}_${sanitizeFileName(product_name)}${ext}`;
+            const newPath = path.join(productsDir, newFilename);
+            fs.renameSync(file.path, newPath);
+            productImageFront = `/products/${newFilename}`;
+        } else if (clear_image_front === 'true') {
+            if (current.product_image_front) {
+                const oldPath = path.join(__dirname, '..', current.product_image_front);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+            productImageFront = null;
+        }
+
+        // ── Handle back image ────────────────────────────────────────
+        let productImageBack = current.product_image_back;
+
+        if (req.files?.['product_image_back']?.[0]) {
+            if (current.product_image_back) {
+                const oldPath = path.join(__dirname, '..', current.product_image_back);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+            const file = req.files['product_image_back'][0];
+            const ext = path.extname(file.filename);
+            const newFilename = `product_image_back_${product_id}_${sanitizeFileName(product_name)}${ext}`;
+            const newPath = path.join(productsDir, newFilename);
+            fs.renameSync(file.path, newPath);
+            productImageBack = `/products/${newFilename}`;
+        } else if (clear_image_back === 'true') {
+            if (current.product_image_back) {
+                const oldPath = path.join(__dirname, '..', current.product_image_back);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+            productImageBack = null;
+        }
+
+        // ── Handle extra images ──────────────────────────────────────
+        let oldExtras = [];
+        try { oldExtras = JSON.parse(current.product_images || '[]'); } catch { oldExtras = []; }
+
+        const removedExtras = oldExtras.filter(src => !keptExtras.includes(src));
+        removedExtras.forEach(src => {
+            const oldPath = path.join(__dirname, '..', src);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        });
+
+        const newExtraPaths = [];
+        if (req.files?.['product_images']?.length > 0) {
+            req.files['product_images'].forEach((file, i) => {
+                const ext = path.extname(file.filename);
+                const newFilename = `product_image_extra_${product_id}_${Date.now()}_${i}_${sanitizeFileName(product_name)}${ext}`;
+                const newPath = path.join(productsDir, newFilename);
+                fs.renameSync(file.path, newPath);
+                newExtraPaths.push(`/products/${newFilename}`);
+            });
+        }
+
+        const allExtras = [...keptExtras, ...newExtraPaths];
+        const productImagesJson = allExtras.length > 0 ? JSON.stringify(allExtras) : null;
+
+        // ── Update product_master ────────────────────────────────────
+        await knex('product_master')
+            .where({ product_id })
+            .update({
+                product_name,
+                product_description: product_description || null,
+                product_category,
+                product_collection: product_collection || null,
+                is_active: is_active === '1' || is_active === 1 ? 1 : 0,  // ← fixed: was referencing undefined `status`
+                has_variants: has_variants === 'true' || has_variants === true,
+                product_image_front: productImageFront,
+                product_image_back: productImageBack,
+                product_images: productImagesJson,
+                updated_at: now,
+            });
+
+        // ── Upsert variants ──────────────────────────────────────────
+        if (parsedVariants.length > 0) {
+            const incomingIds = parsedVariants
+                .filter(v => v.product_variant_id)
+                .map(v => v.product_variant_id);
+
+            await knex('product_variant_master')
+                .where({ product_id })
+                .whereNotIn('product_variant_id', incomingIds.length > 0 ? incomingIds : [0])
+                .delete();
+
+            for (const v of parsedVariants) {
+                const variantData = {
+                    product_id,
+                    product_variant_size: v.product_variant_size,
+                    product_variant_quantity: parseInt(v.product_variant_quantity) || 0,
+                    product_variant_price: parseFloat(v.product_variant_price) || 0,
+
+                    product_variant_sale_price: v.product_variant_sale_price
+                        ? parseFloat(v.product_variant_sale_price) || 0
+                        : 0,
+                };
+
+                if (v.product_variant_id) {
+                    await knex('product_variant_master')
+                        .where({ product_variant_id: v.product_variant_id })
+                        .update(variantData);
+                } else {
+                    await knex('product_variant_master').insert({
+                        ...variantData,
+                        created_at: now,
+                    });
+                }
+            }
+        }
+
+        return res.status(200).json({
+            message: 'Product updated successfully.',
+            product_id,
+        });
+
+    } catch (err) {
+        console.log('INTERNAL ERROR: ', err);
+        if (req.files) {
+            Object.values(req.files).flat().forEach(file => {
+                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(oldPath);
+            });
+        }
+        return res.status(500).json({ message: 'Internal server error.', error: err.message });
+    }
+});
+
+
+// COLLECTION
 router.post('/add-collection', uploadCollection.single('collection_image'), async (req, res, next) => {
     try {
         const { collection_title, collection_subtitle } = req.body;
@@ -444,10 +687,79 @@ router.get('/get-all-collection', async (req, res, next) => {
         console.log('Unable to fetch all collections: ', err)
     }
 })
+router.get('/get-collection-by-id', async (req, res, next) => {
+    const getbyId = await CollectionMaster.findAll({
+        where: {
+            collection_id: req.query.id
+        }
+    })
+    console.log(getbyId)
+    console.log('triggered /collection-by-id')
+    res.json(getbyId[0])
+})
+router.put('/update-collection', uploadCollection.single('collection_images'), async (req, res, next) => {
+    try {
+        const { collection_id, collection_title, collection_subtitle, is_active } = req.body;
+
+        if (!collection_id) {
+            return res.status(400).json({ message: 'collection_id is required.' });
+        }
+        if (!collection_title) {
+            return res.status(400).json({ message: 'collection_title is required.' });
+        }
+
+        // Fetch existing record
+        const current = await knex('product_collection_master')
+            .where({ collection_id })
+            .first();
+
+        if (!current) {
+            return res.status(404).json({ message: 'Collection not found.' });
+        }
+
+        // Handle image — only update if a new file was uploaded
+        let imagePath = current.collection_images;
+
+        if (req.file) {
+            // Delete old image if it exists
+            if (current.collection_images) {
+                const oldPath = path.join(__dirname, '..', current.collection_images);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+            }
+
+            const ext = path.extname(req.file.filename);
+            const newFilename = `collection_image_${collection_id}${ext}`;
+            const newPath = path.join(collectionImagesDir, newFilename);
+            fs.renameSync(req.file.path, newPath);
+            imagePath = `/collectionImages/${newFilename}`;
+        }
+
+        await knex('product_collection_master')
+            .where({ collection_id })
+            .update({
+                collection_title,
+                collection_subtitle: collection_subtitle || null,
+                collection_images: imagePath,
+                is_active: is_active == 1 ? '1' : '0',
+                updated_at: new Date(),
+            });
+
+        return res.status(200).json({
+            message: 'Collection updated successfully.',
+            collection_id,
+        });
+
+    } catch (err) {
+        console.error('Unable to update collection:', err);
+        if (req.file?.path && fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
+        return res.status(500).json({ message: 'Internal server error.', error: err.message });
+    }
+});
 
 
-
-
+//SETUP
 router.post('/add-setup', uploadSetup.fields([
     { name: 'shirt', maxCount: 1 },
     { name: 'hoodie', maxCount: 1 },
@@ -458,15 +770,42 @@ router.post('/add-setup', uploadSetup.fields([
         const categories = ['shirt', 'hoodie', 'bottoms', 'footwear'];
         const savedPaths = {};
 
+        // First, process all uploaded files and save them with proper names
         for (const category of categories) {
             if (req.files?.[category]?.[0]) {
                 const file = req.files[category][0];
-                const ext = path.extname(file.filename);
+
+                // Get the file extension from the original filename
+                const ext = path.extname(file.originalname);
                 const newFilename = `setup_${category}${ext}`;
                 const newPath = path.join(setupImagesDir, newFilename);
 
-                if (fs.existsSync(newPath)) fs.unlinkSync(newPath);
-                fs.renameSync(file.path, newPath);
+                // Check if source file exists
+                if (!fs.existsSync(file.path)) {
+                    console.error(`Source file does not exist: ${file.path}`);
+                    throw new Error(`Source file missing for ${category}`);
+                }
+
+                try {
+                    // Try rename first (faster)
+                    fs.renameSync(file.path, newPath);
+                    console.log(`Renamed ${category} to: ${newFilename}`);
+                } catch (renameError) {
+                    console.error(`Rename failed for ${category}, trying copy method:`, renameError);
+
+                    // Fallback: copy then delete
+                    try {
+                        const data = fs.readFileSync(file.path);
+                        fs.writeFileSync(newPath, data);
+                        if (fs.existsSync(file.path)) {
+                            fs.unlinkSync(file.path);
+                        }
+                        console.log(`Copied ${category} to: ${newFilename} (fallback method)`);
+                    } catch (copyError) {
+                        console.error(`Copy failed for ${category}:`, copyError);
+                        throw copyError;
+                    }
+                }
 
                 savedPaths[category] = `/setupImages/${newFilename}`;
             }
@@ -474,6 +813,33 @@ router.post('/add-setup', uploadSetup.fields([
 
         if (Object.keys(savedPaths).length === 0) {
             return res.status(400).json({ message: 'At least one image is required.' });
+        }
+
+        // --- NOW clear the setupImages folder of OLD files (not the ones we just saved) ---
+        if (fs.existsSync(setupImagesDir)) {
+            const files = fs.readdirSync(setupImagesDir);
+            for (const file of files) {
+                const filePath = path.join(setupImagesDir, file);
+                try {
+                    if (fs.statSync(filePath).isFile()) {
+                        // Check if this file is one of the ones we just saved
+                        const isNewFile = Object.values(savedPaths).some(
+                            savedPath => path.basename(savedPath) === file
+                        );
+
+                        // Only delete if it's NOT one of the newly saved files
+                        if (!isNewFile) {
+                            fs.unlinkSync(filePath);
+                            console.log(`Deleted old file: ${file}`);
+                        } else {
+                            console.log(`Keeping new file: ${file}`);
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Error processing ${file}:`, e);
+                }
+            }
+            console.log('Old setup images cleaned up.');
         }
 
         // Check if a record already exists
@@ -502,12 +868,23 @@ router.post('/add-setup', uploadSetup.fields([
 
     } catch (err) {
         console.error('Unable to save setup images:', err);
+        // Clean up uploaded files if there's an error
         if (req.files) {
             Object.values(req.files).flat().forEach(file => {
-                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+                if (file.path && fs.existsSync(file.path)) {
+                    try {
+                        fs.unlinkSync(file.path);
+                        console.log(`Cleaned up: ${file.path}`);
+                    } catch (e) {
+                        console.error('Error deleting temporary file:', e);
+                    }
+                }
             });
         }
-        return res.status(500).json({ message: 'Internal server error.', error: err.message });
+        return res.status(500).json({
+            message: 'Internal server error.',
+            error: err.message
+        });
     }
 });
 
@@ -520,13 +897,5 @@ router.get('/get-all-setup', async (req, res, next) => {
     }
 })
 
-router.get('/get-all-collection', async (req, res, next) => {
-    try {
-        const getAll = await knex('product_collection_master').select('*');
-        res.json(getAll)
-    } catch (err) {
-        console.log('Unable to fetch all collection: ', err)
-    }
-})
 
 module.exports = router;

@@ -3,8 +3,9 @@ import axios from "axios";
 import config from "../../config";
 import Loading from "../../components/Loading";
 import { Toast } from '../../components/Notification';
+import ShopSetupProduct from "../dashboard/shop-setupProduct";
 
-// ── Shared style primitives ─────────────────────────────────────────
+// ── Constants ───────────────────────────────────────────────────────
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 const MAX_FILE_SIZE_MB = 5;
@@ -22,36 +23,317 @@ const categories = [
     { key: "footwear", label: "Footwear", tag: "FOOTWEAR" },
 ];
 
-// ── Card wrapper ────────────────────────────────────────────────────
+// ── Styles ──────────────────────────────────────────────────────────
 
-function Card({ title, children }) {
-    return (
-        <div style={{
-            background: "#fff",
-            border: "1px solid #e1e3e5",
-            borderRadius: 8,
-            padding: 20,
-            display: "flex",
-            flexDirection: "column",
-            gap: 16,
-        }}>
-            {title && (
-                <div style={{
-                    fontSize: 14,
-                    fontWeight: 600,
-                    color: "#202223",
-                    paddingBottom: 12,
-                    borderBottom: "1px solid #e1e3e5",
-                }}>
-                    {title}
-                </div>
-            )}
-            {children}
-        </div>
-    );
-}
+const STYLES = `
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+    * { box-sizing: border-box; margin: 0; padding: 0; }
 
-// ── Single image upload tile ────────────────────────────────────────
+    .as-root {
+        min-height: 100vh;
+        background: #f5f5f5;
+        color: #0a0a0a;
+        font-family: 'Inter', system-ui, sans-serif;
+        padding: 28px 24px;
+        margin-top: 100px;
+    }
+
+    .as-inner {
+        max-width: 1160px;
+        margin: 0 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    /* Page header */
+    .as-page-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        padding-bottom: 20px;
+        border-bottom: 2px solid #0a0a0a;
+        margin-bottom: 24px;
+    }
+
+    .as-page-title {
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+        color: #0a0a0a;
+        line-height: 1;
+    }
+
+    .as-page-subtitle {
+        font-size: 12px;
+        color: #888;
+        font-weight: 400;
+        margin-top: 6px;
+        letter-spacing: 0.01em;
+    }
+
+    /* Card */
+    .as-card {
+        background: #fff;
+        border: 1px solid #e0e0e0;
+        border-top: 3px solid #0a0a0a;
+        padding: 28px;
+    }
+
+    .as-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 24px;
+    }
+
+    .as-card-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #888;
+    }
+
+    .as-card-divider {
+        flex: 1;
+        height: 1px;
+        background: #e0e0e0;
+    }
+
+    /* Upload grid */
+    .as-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 12px;
+    }
+
+    /* Upload tile */
+    .as-tile {
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+    }
+
+    .as-tile-drop {
+        border: 1.5px solid #e0e0e0;
+        height: 200px;
+        cursor: pointer;
+        background: #fafafa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        overflow: hidden;
+        transition: border-color 0.15s, background 0.15s;
+    }
+
+    .as-tile-drop:hover {
+        border-color: #0a0a0a;
+        background: #f5f5f5;
+    }
+
+    .as-tile-drop.dragging {
+        border-color: #0a0a0a;
+        border-style: solid;
+        background: #f0f0f0;
+    }
+
+    .as-tile-drop.has-error {
+        border-color: #c0392b;
+    }
+
+    .as-tile-drop.has-preview {
+        cursor: default;
+        border-color: #0a0a0a;
+    }
+
+    .as-tile-preview {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .as-tile-remove {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        background: #0a0a0a;
+        color: #fff;
+        border: none;
+        width: 26px;
+        height: 26px;
+        cursor: pointer;
+        font-size: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s;
+        line-height: 1;
+    }
+
+    .as-tile-remove:hover {
+        background: #333;
+    }
+
+    .as-tile-empty {
+        text-align: center;
+        color: #aaa;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        padding: 16px;
+    }
+
+    .as-tile-tag {
+        font-size: 9px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #0a0a0a;
+        background: #0a0a0a;
+        color: #fff;
+        padding: 3px 8px;
+        display: inline-block;
+    }
+
+    .as-tile-hint {
+        font-size: 11px;
+        color: #aaa;
+        line-height: 1.5;
+    }
+
+    .as-tile-hint span {
+        color: #0a0a0a;
+        font-weight: 500;
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    .as-tile-meta {
+        font-size: 10px;
+        color: #bbb;
+        letter-spacing: 0.02em;
+    }
+
+    /* Tile footer */
+    .as-tile-footer {
+        background: #0a0a0a;
+        padding: 8px 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .as-tile-name {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #fff;
+    }
+
+    .as-tile-error {
+        font-size: 10px;
+        color: #c0392b;
+        padding: 6px 0 2px;
+        letter-spacing: 0.01em;
+    }
+
+    /* Actions row */
+    .as-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 12px;
+        margin-top: 24px;
+        padding-top: 20px;
+        border-top: 1px solid #e0e0e0;
+    }
+
+    .as-hint-text {
+        font-size: 11px;
+        color: #bbb;
+    }
+
+    /* Save button */
+    .as-save-btn {
+        background: #0a0a0a;
+        color: #fff;
+        border: 1.5px solid #0a0a0a;
+        padding: 10px 28px;
+        font-size: 12px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        cursor: pointer;
+        font-family: inherit;
+        transition: background 0.15s, color 0.15s;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .as-save-btn:hover:not(:disabled) {
+        background: #fff;
+        color: #0a0a0a;
+    }
+
+    .as-save-btn:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    /* Preview section */
+    .as-preview-section {
+        margin-top: 32px;
+    }
+
+    .as-preview-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 16px;
+    }
+
+    .as-preview-label {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: #888;
+    }
+
+    .as-preview-divider {
+        flex: 1;
+        height: 1px;
+        background: #e0e0e0;
+    }
+
+    .as-preview-inner {
+        border: 1px solid #e0e0e0;
+        border-top: 3px solid #0a0a0a;
+        overflow: hidden;
+        background: #fff;
+    }
+
+    /* Toast */
+    .as-toast-wrap {
+        position: fixed;
+        bottom: 20px;
+        right: 24px;
+        z-index: 9999;
+        width: 340px;
+        pointer-events: none;
+    }
+
+    .as-toast-wrap > div {
+        pointer-events: auto;
+    }
+`;
+
+// ── Sub-components ──────────────────────────────────────────────────
 
 function ImageUploadCard({ label, tag, preview, error, onFileChange, onRemove }) {
     const inputRef = useRef(null);
@@ -65,81 +347,52 @@ function ImageUploadCard({ label, tag, preview, error, onFileChange, onRemove })
         onFileChange(file, null);
     };
 
+    let dropClass = "as-tile-drop";
+    if (dragging) dropClass += " dragging";
+    if (error) dropClass += " has-error";
+    if (preview) dropClass += " has-preview";
+
     return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="as-tile">
             <div
+                className={dropClass}
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={e => { e.preventDefault(); setDragging(false); handleFiles(e.dataTransfer.files); }}
                 onClick={() => !preview && inputRef.current?.click()}
-                style={{
-                    border: `2px dashed ${dragging ? "#202223" : error ? "#d82c0d" : "#c9cccf"}`,
-                    borderRadius: 6,
-                    overflow: "hidden",
-                    height: 160,
-                    cursor: preview ? "default" : "pointer",
-                    background: dragging ? "#f6f6f7" : "#fafafa",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    position: "relative",
-                    transition: "border-color 0.15s, background 0.15s",
-                }}
             >
                 {preview ? (
                     <>
-                        <img
-                            src={preview}
-                            alt={label}
-                            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                        />
+                        <img className="as-tile-preview" src={preview} alt={label} />
                         <button
                             type="button"
+                            className="as-tile-remove"
                             onClick={e => { e.stopPropagation(); onRemove(); }}
-                            style={{
-                                position: "absolute", top: 6, right: 6,
-                                background: "rgba(0,0,0,0.55)", color: "#fff",
-                                border: "none", borderRadius: "50%",
-                                width: 24, height: 24, cursor: "pointer", fontSize: 14,
-                                display: "flex", alignItems: "center", justifyContent: "center",
-                            }}
-                            title={`Remove ${label} image`}
+                            title={`Remove ${label}`}
                         >×</button>
                     </>
                 ) : (
-                    <div style={{ textAlign: "center", color: "#6d7175", display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-                        <span style={{
-                            fontSize: 10, fontWeight: 600, letterSpacing: "0.08em",
-                            color: "#6d7175", background: "#f1f2f4",
-                            padding: "3px 8px", borderRadius: 4,
-                        }}>
-                            {tag}
-                        </span>
-                        <div style={{ fontSize: 12 }}>
-                            Drag & drop or{" "}
-                            <span
-                                style={{ color: "#202223", fontWeight: 500, textDecoration: "underline", cursor: "pointer" }}
-                                onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}
-                            >
+                    <div className="as-tile-empty">
+                        <span className="as-tile-tag">{tag}</span>
+                        <div className="as-tile-hint">
+                            Drop image or{" "}
+                            <span onClick={e => { e.stopPropagation(); inputRef.current?.click(); }}>
                                 browse
                             </span>
                         </div>
-                        <div style={{ fontSize: 11, color: "#8c9196" }}>
-                            JPG, PNG, WebP — max {MAX_FILE_SIZE_MB}MB
-                        </div>
+                        <div className="as-tile-meta">JPG · PNG · WebP — {MAX_FILE_SIZE_MB}MB max</div>
                     </div>
                 )}
             </div>
 
-            <span style={{ fontSize: 13, fontWeight: 500, color: "#202223", textAlign: "center" }}>
-                {label}
-            </span>
+            <div className="as-tile-footer">
+                <span className="as-tile-name">{label}</span>
+                {preview && (
+                    <span style={{ fontSize: 10, color: "#666", letterSpacing: "0.04em" }}>✓ Ready</span>
+                )}
+            </div>
 
-            {error && (
-                <span style={{ fontSize: 11, color: "#d82c0d", textAlign: "center" }}>
-                    {error}
-                </span>
-            )}
+            {error && <div className="as-tile-error">{error}</div>}
 
             <input
                 ref={inputRef}
@@ -153,51 +406,60 @@ function ImageUploadCard({ label, tag, preview, error, onFileChange, onRemove })
 }
 
 function SaveButton({ loading, onClick }) {
-    const [hovered, setHovered] = useState(false);
     return (
         <button
             type="button"
+            className="as-save-btn"
             onClick={onClick}
             disabled={loading}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-                background: loading ? "#44474a" : hovered ? "#44474a" : "#202223",
-                color: "#fff",
-                border: "none",
-                borderRadius: 6,
-                padding: "9px 24px",
-                fontSize: 13,
-                fontWeight: 500,
-                cursor: loading ? "not-allowed" : "pointer",
-                fontFamily: "inherit",
-                opacity: loading ? 0.7 : 1,
-                transition: "background 0.15s",
-            }}
         >
-            {loading ? "Saving…" : "Save setup"}
+            {loading ? (
+                <>
+                    <span style={{
+                        display: "inline-block",
+                        width: 10, height: 10,
+                        border: "1.5px solid currentColor",
+                        borderTopColor: "transparent",
+                        borderRadius: "50%",
+                        animation: "as-spin 0.7s linear infinite",
+                    }} />
+                    Saving
+                </>
+            ) : "Save setup"}
         </button>
     );
 }
 
-// ── Main component ──────────────────────────────────────────────────
+function PreviewSection({ refreshKey }) {
+    return (
+        <div className="as-preview-section">
+            <div className="as-preview-header">
+                <span className="as-preview-label">Preview</span>
+                <div className="as-preview-divider" />
+            </div>
+            <div className="as-preview-inner">
+                <ShopSetupProduct key={refreshKey} />
+            </div>
+        </div>
+    );
+}
+
+// ── Main ────────────────────────────────────────────────────────────
 
 export default function AddSetup() {
     const [files, setFiles] = useState({});
     const [previews, setPreviews] = useState({});
     const [fileErrors, setFileErrors] = useState({});
-
     const [notifications, setNotifications] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [refreshPreview, setRefreshPreview] = useState(0);
 
     if (loading) return <Loading />;
 
     const addNotif = (title, message, type) => {
         const id = Date.now();
         setNotifications(prev => [...prev, { id, title, message, type }]);
-        setTimeout(() => {
-            setNotifications(prev => prev.filter(n => n.id !== id));
-        }, 4000);
+        setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 4000);
     };
 
     const handleFileChange = (key, file, err) => {
@@ -220,7 +482,7 @@ export default function AddSetup() {
     const handleSave = async () => {
         const hasAny = categories.some(({ key }) => files[key]);
         if (!hasAny) {
-            addNotif("Nothing to save", "Please upload at least one image before saving.", "error");
+            addNotif("Nothing to save", "Upload at least one image before saving.", "error");
             return;
         }
 
@@ -234,52 +496,54 @@ export default function AddSetup() {
             await axios.post(`${config.baseApi}/product/add-setup`, formData, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
-            addNotif("Saved successfully", "Setup images have been updated.", "success");
+            addNotif("Saved", "Setup images have been updated.", "success");
+            setRefreshPreview(prev => prev + 1);
+            setTimeout(() => window.location.reload(), 2000);
         } catch (err) {
             const msg = err.response?.data?.message || err.message || "Server error.";
-            addNotif("Something went wrong!", msg, "error");
+            addNotif("Something went wrong", msg, "error");
         } finally {
             setLoading(false);
         }
     };
 
-    return (
-        <div style={{
-            minHeight: "100vh",
-            background: "#f1f2f4",
-            color: "#202223",
-            fontFamily: "'Inter', system-ui, sans-serif",
-            padding: "24px",
-            marginTop: 100,
-        }}>
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
-                * { box-sizing: border-box; }
-            `}</style>
+    const uploadedCount = categories.filter(({ key }) => previews[key]).length;
 
-            {/* Toast container */}
-            <div style={{
-                position: "fixed", bottom: 20, right: 24,
-                zIndex: 9999, width: 340, pointerEvents: "none",
-            }}>
+    return (
+        <div className="as-root">
+            <style>{STYLES}</style>
+            <style>{`@keyframes as-spin { to { transform: rotate(360deg); } }`}</style>
+
+            {/* Toasts */}
+            <div className="as-toast-wrap">
                 {notifications.map(n => (
-                    <div key={n.id} style={{ pointerEvents: "auto" }}>
-                        <Toast
-                            {...n}
-                            onDismiss={id =>
-                                setNotifications(prev => prev.filter(n => n.id !== id))
-                            }
-                        />
+                    <div key={n.id}>
+                        <Toast {...n} onDismiss={id => setNotifications(prev => prev.filter(n => n.id !== id))} />
                     </div>
                 ))}
             </div>
 
-            <div style={{ maxWidth: 900, margin: "0 auto" }}>
-                <Card title="Setup images">
-                    <p style={{ margin: 0, fontSize: 12, color: "#6d7175" }}>
-                        Upload one image per category. These appear on the shop setup display.
-                    </p>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16 }}>
+            <div className="as-inner">
+
+                {/* Page header */}
+                <div className="as-page-header">
+                    <div>
+                        <div className="as-page-title">Shop Setup</div>
+                        <div className="as-page-subtitle">Upload one image per clothing category</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#888", fontWeight: 500 }}>
+                        {uploadedCount} / {categories.length} uploaded
+                    </div>
+                </div>
+
+                {/* Upload card */}
+                <div className="as-card">
+                    <div className="as-card-header">
+                        <span className="as-card-label">Category Images</span>
+                        <div className="as-card-divider" />
+                    </div>
+
+                    <div className="as-grid">
                         {categories.map(({ key, label, tag }) => (
                             <ImageUploadCard
                                 key={key}
@@ -292,10 +556,16 @@ export default function AddSetup() {
                             />
                         ))}
                     </div>
-                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+
+                    <div className="as-actions">
+                        <span className="as-hint-text">Changes are saved immediately on upload</span>
                         <SaveButton loading={loading} onClick={handleSave} />
                     </div>
-                </Card>
+                </div>
+
+                {/* Preview */}
+                <PreviewSection refreshKey={refreshPreview} />
+
             </div>
         </div>
     );
