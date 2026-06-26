@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 export default function ShopCollection() {
     const [collections, setCollections] = useState([]);
-
+    const navigate = useNavigate()
     useEffect(() => {
         const fetchCollections = async () => {
             try {
@@ -159,7 +160,7 @@ export default function ShopCollection() {
 
             <div className="col-grid">
                 {collections.map((col, i) => (
-                    <div className="col-item" key={col.collection_id}>
+                    <div className="col-item" key={col.collection_id} onClick={() => navigate('/all-collections?id=' + col.collection_id)}>
                         <img
                             className="col-img"
                             src={`${baseUrl}${col.collection_images}`}

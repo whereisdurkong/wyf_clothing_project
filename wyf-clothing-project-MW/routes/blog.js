@@ -6,8 +6,14 @@ require('dotenv').config();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+var Sequelize = require('sequelize');
+const { DataTypes } = Sequelize;
 
-
+var db = new Sequelize(process.env.DATABASE, process.env.USER, process.env.PASSWORD, {
+    host: process.env.SERVER,
+    dialect: "mssql",
+    port: parseInt(process.env.APP_SERVER_PORT),
+});
 
 // File filter for images
 const fileFilter = (req, file, cb) => {
@@ -85,6 +91,52 @@ const uploadDashboard = multer({
     fileFilter: fileFilter, // reuses your existing fileFilter
 });
 
+const BlogMaster = db.define('blog_master', {
+    blog_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    content: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    title: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    album: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    created_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    created_by: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_by: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    // is_active: {
+    //     type: DataTypes.STRING(100),
+    //     allowNull: true
+    // },
+}, {
+    freezeTableName: false,
+    timestamps: false,
+    createdAt: false,
+    updatedAt: false,
+    tableName: 'blog_master'
+})
+
 
 // POST /add-blog
 router.post('/add-blog', uploadBlogAlbum.array('albumImages', 20), async (req, res, next) => {
@@ -121,6 +173,80 @@ router.get('/get-all-blog', async (req, res, next) => {
     }
 })
 
+router.get('/get-blog-by-id', async (req, res, next) => {
+    try {
+        console.log('+++++++++++++++++++===', req.query.id)
+        const getById = await BlogMaster.findAll({
+            where: {
+                blog_id: req.query.id
+            }
+        })
+        console.log(getById)
+        console.log('triggered /blog-by-id')
+        res.json(getById[0])
+    } catch (err) {
+
+    }
+})
+
+router.put('/update-blog', uploadBlogAlbum.array('albumImages', 20), async (req, res, next) => {
+    try {
+        const { id, title, content, updatedAt, removedImages } = req.body;
+
+        if (!id) return res.status(400).json({ success: false, message: 'Blog ID is required.' });
+
+        // Fetch current record to get existing album paths
+        const existing = await knex('blog_master').where({ blog_id: id }).first();
+        if (!existing) return res.status(404).json({ success: false, message: 'Blog not found.' });
+
+        let currentPaths = [];
+        try {
+            currentPaths = existing.album ? JSON.parse(existing.album) : [];
+        } catch {
+            currentPaths = [];
+        }
+
+        // Parse which filenames the user removed on the frontend
+        let toRemove = [];
+        try {
+            toRemove = removedImages ? JSON.parse(removedImages) : [];
+        } catch {
+            toRemove = [];
+        }
+
+        // Delete removed image files from disk
+        for (const filename of toRemove) {
+            const filePath = path.join(__dirname, '../blogAlbum', filename);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        // Keep only paths that were NOT removed
+        const keptPaths = currentPaths.filter(p => {
+            const fname = p.split('/').pop();
+            return !toRemove.includes(fname);
+        });
+
+        // Append newly uploaded files
+        const newPaths = (req.files || []).map(f => `blogAlbum/${f.filename}`);
+        const updatedAlbum = [...keptPaths, ...newPaths];
+
+        // Update the DB row
+        await knex('blog_master').where({ blog_id: id }).update({
+            title: title || existing.title,
+            content: content !== undefined ? content : existing.content,
+            album: JSON.stringify(updatedAlbum),
+            updated_at: updatedAt || new Date().toISOString(),
+            updated_by: req.body.updated_by || null
+        });
+
+        res.json({ success: true, message: 'Blog updated successfully.', album: updatedAlbum });
+    } catch (err) {
+        next(err);
+    }
+});
+
 // POST /upload-dashboard-images
 router.post('/upload-dashboard-images', uploadDashboard.array('dashboardImages', 20), async (req, res, next) => {
     try {
@@ -155,4 +281,58 @@ router.get('/get-all-dashboard', async (req, res, next) => {
         console.log('INTERNAL ERROR: ', err)
     }
 })
+
+
+router.post('/update-dashboard', uploadDashboard.array('dashboardImages', 20), async (req, res, next) => {
+    try {
+        const { dashboard_id, keptImages } = req.body;
+
+        if (!dashboard_id) return res.status(400).json({ success: false, message: 'dashboard_id is required.' });
+
+        // Fetch current record
+        const existing = await knex('dashboard_master').where({ dashboard_id }).first();
+        if (!existing) return res.status(404).json({ success: false, message: 'Dashboard not found.' });
+
+        let currentPaths = [];
+        try {
+            currentPaths = existing.images ? JSON.parse(existing.images) : [];
+        } catch {
+            currentPaths = [];
+        }
+
+        let kept = [];
+        try {
+            kept = keptImages ? JSON.parse(keptImages) : [];
+        } catch {
+            kept = [];
+        }
+
+        // Delete removed images from disk
+        const removed = currentPaths.filter((p) => !kept.includes(p));
+        for (const imgPath of removed) {
+            const filePath = path.join(__dirname, '..', imgPath);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+            }
+        }
+
+        // Append new uploads
+        const newPaths = (req.files || []).map((f) => `dashboardImages/${f.filename}`);
+        const updatedImages = [...kept, ...newPaths];
+
+        // Delete row if no images remain
+        if (updatedImages.length === 0) {
+            await knex('dashboard_master').where({ dashboard_id }).delete();
+            return res.json({ success: true, message: 'Dashboard record deleted.', deleted: true });
+        }
+
+        // Update DB
+        await knex('dashboard_master').where({ dashboard_id }).update({
+            images: JSON.stringify(updatedImages),
+        });
+        res.json({ success: true, message: 'Dashboard updated.', newPaths });
+    } catch (err) {
+        next(err);
+    }
+});
 module.exports = router;

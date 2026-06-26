@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate, useNavigation } from "react-router-dom";
 
 export default function AdminBlog() {
     const [blogs, setBlogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const navigate = useNavigate()
+
 
     useEffect(() => {
         const fetch = async () => {
@@ -16,7 +19,7 @@ export default function AdminBlog() {
                     (a, b) => new Date(b.created_at) - new Date(a.created_at)
                 );
 
-                setBlogs(sorted.slice(0, 3));
+                setBlogs(sorted);
             } catch (err) {
                 console.log("Unable to fetch all blog details");
             } finally {
@@ -66,7 +69,10 @@ export default function AdminBlog() {
                         <div key={blog.blog_id ?? index} style={{
                             display: "flex",
                             flexDirection: "column",
-                        }}>
+                            cursor: 'pointer'
+                        }}
+                            onClick={() => navigate('/admin/admin-blog-view?id=' + blog.blog_id)}
+                        >
                             {/* Image */}
                             {imageUrl && (
                                 <img

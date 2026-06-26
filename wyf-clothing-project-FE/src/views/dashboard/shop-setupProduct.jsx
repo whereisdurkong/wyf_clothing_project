@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 const CATEGORIES = [
-    { key: "shirt", label: "Shirts" },
-    { key: "hoodie", label: "Hoodies" },
-    { key: "bottoms", label: "Bottoms" },
-    { key: "footwear", label: "Footwear" },
+    { key: "shirt", label: "Shirts", value: 'tshirt' },
+    { key: "hoodie", label: "Hoodies", value: 'hoodies_jackets' },
+    { key: "bottoms", label: "Bottoms", value: 'bottoms' },
+    { key: "footwear", label: "Footwear", value: 'footwear' },
 ];
 
 const btnStyle = `
@@ -49,10 +50,51 @@ const btnStyle = `
         border-color: #ffffff;
         background-color: transparent;
     }
+
+    /* ── RESPONSIVE ── */
+    .setup-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        width: 100%;
+    }
+    .setup-card {
+        position: relative;
+        height: 70vh;
+        overflow: hidden;
+        cursor: pointer;
+    }
+    .setup-card-content {
+        position: absolute;
+        bottom: 50px;
+        left: 50px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    @media (max-width: 768px) {
+        .setup-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .setup-card {
+            height: 45vh;
+        }
+        .setup-card-content {
+            bottom: 24px;
+            left: 24px;
+        }
+        .na-shop-b-btn {
+            padding: 10px 24px;
+            font-size: 10px;
+            letter-spacing: 2px;
+        }
+    }
 `;
 
 export default function ShopSetupProduct() {
     const [setupData, setSetupData] = useState(null);
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetch = async () => {
@@ -73,9 +115,9 @@ export default function ShopSetupProduct() {
             <section style={styles.section}>
                 <h2 style={styles.heading}>PRODUCTS</h2>
 
-                <div style={styles.grid}>
-                    {CATEGORIES.map(({ key, label }) => (
-                        <div key={key} style={styles.card}>
+                <div className="setup-grid">
+                    {CATEGORIES.map(({ key, label, value }) => (
+                        <div key={key} className="setup-card">
                             <div
                                 style={{
                                     ...styles.imageLayer,
@@ -86,9 +128,9 @@ export default function ShopSetupProduct() {
                                 }}
                             />
                             <div style={styles.overlay} />
-                            <div style={styles.cardContent}>
+                            <div className="setup-card-content">
                                 <span style={styles.label}>{label}</span>
-                                <button className="na-shop-b-btn">
+                                <button className="na-shop-b-btn" onClick={() => navigate('/all-product?category=' + value)}>
                                     <span>View products</span>
                                 </button>
                             </div>

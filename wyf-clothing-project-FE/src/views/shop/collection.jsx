@@ -1,10 +1,11 @@
 import axios from "axios";
 import config from "../../config";
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 export default function Collection() {
     const [collections, setCollections] = useState([]);
-
+    const navigate = useNavigate();
     useEffect(() => {
         const fetch = async () => {
             try {
@@ -22,7 +23,7 @@ export default function Collection() {
     return (
         <div style={styles.grid}>
             {collections.map((col) => (
-                <div key={col.collection_id} style={styles.card}>
+                <div key={col.collection_id} style={styles.card} onClick={() => navigate('/all-collections?id=' + col.collection_id)}>
                     <img
                         src={`${baseUrl}${col.collection_images}`}
                         alt={col.collection_title}

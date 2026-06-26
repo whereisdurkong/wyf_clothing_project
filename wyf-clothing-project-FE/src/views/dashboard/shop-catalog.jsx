@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 // ─── HELPERS ───────────────────────────────────────────────────────────────
 function formatPrice(p) {
@@ -49,12 +50,47 @@ const ProductCard = ({ product, variants }) => {
     const [hovered, setHovered] = useState(false);
     const [frontError, setFrontError] = useState(false);
     const [backError, setBackError] = useState(false);
-
+    const navigate = useNavigate();
     const tag = getTag(product, variants);
-    const price = formatPrice(product.product_price);
-    const discountPrice = product.product_discount_price ? formatPrice(product.product_discount_price) : "";
-    const displayPrice = discountPrice || price;
-    const originalPrice = discountPrice ? price : "";
+
+    const productVariants = variants[product.product_id] || [];
+
+    let displayPrice, originalPrice, priceLabel;
+
+    if (product.has_variants == '1') {
+        const available = productVariants.filter(v => Number(v.product_variant_quantity) > 0);
+        const cheapest = available.reduce((min, v) => {
+            const vEffective = Number(v.product_variant_sale_price) > 0
+                ? Number(v.product_variant_sale_price)
+                : Number(v.product_variant_price);
+            const minEffective = Number(min.product_variant_sale_price) > 0
+                ? Number(min.product_variant_sale_price)
+                : Number(min.product_variant_price);
+            return vEffective < minEffective ? v : min;
+        }, available[0]);
+
+        if (cheapest) {
+            const hasSalePrice = cheapest.product_variant_sale_price &&
+                Number(cheapest.product_variant_sale_price) > 0;
+
+            if (hasSalePrice) {
+                originalPrice = formatPrice(cheapest.product_variant_price);
+                displayPrice = formatPrice(cheapest.product_variant_sale_price);
+            } else {
+                displayPrice = formatPrice(cheapest.product_variant_price);
+            }
+
+            priceLabel = available.length > 1 ? `From ${displayPrice}` : displayPrice;
+        } else {
+            priceLabel = "Out of stock";
+        }
+    } else {
+        const price = formatPrice(product.product_price);
+        const discountPrice = product.product_discount_price ? formatPrice(product.product_discount_price) : "";
+        displayPrice = discountPrice || price;
+        originalPrice = discountPrice ? price : "";
+        priceLabel = displayPrice || "—";
+    }
 
     const hasFront = product.product_image_front && !frontError;
     const hasBack = product.product_image_back && !backError;
@@ -66,6 +102,7 @@ const ProductCard = ({ product, variants }) => {
             className="na-card"
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
+            onClick={() => navigate('/product?id=' + product.product_id)}
         >
             {/* ── IMAGE ── */}
             <div className="na-img-wrap">
@@ -100,7 +137,7 @@ const ProductCard = ({ product, variants }) => {
                 <p className="na-name">{product.product_name || "—"}</p>
                 <div className="na-price-wrap">
                     {originalPrice && <span className="na-original-price">{originalPrice}</span>}
-                    <span className="na-price">{displayPrice || "—"}</span>
+                    <span className="na-price">{priceLabel || "—"}</span>
                 </div>
             </div>
         </div>
@@ -148,6 +185,7 @@ export default function ShopCatalog() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
+    const navigate = useNavigate();
     useEffect(() => {
         async function fetchData() {
             try {
@@ -200,8 +238,8 @@ export default function ShopCatalog() {
         /* ── HEADER ── */
         .na-header {
           text-align: center;
-          padding: 48px 40px 32px;
-          border-bottom: 1px solid #eee;
+          padding: 88px 40px 32px;
+    
           margin-bottom: 32px;
         }
         .na-title {
@@ -354,18 +392,19 @@ export default function ShopCatalog() {
         }
 
         /* ── RESPONSIVE ── */
-        @media (max-width: 768px) {
-          .na-grid { grid-template-columns: repeat(2, 1fr); margin: 0 16px; }
-          .na-card:nth-child(3n) { border-right: 1px solid #f0f0f0; }
-          .na-card:nth-child(2n) { border-right: none; }
-          .na-header { padding: 32px 16px 24px; }
-          .na-filter-bar { padding: 0 16px 24px; }
-        }
-        @media (max-width: 480px) {
-          .na-grid { grid-template-columns: 1fr; margin: 0 16px; }
-          .na-card:nth-child(2n) { border-right: 1px solid #f0f0f0; }
-          .na-card { border-right: none; }
-        }
+@media (max-width: 768px) {
+  .na-grid { grid-template-columns: repeat(2, 1fr); margin: 0 12px; }
+
+  /* reset desktop 3n rule, apply 2-col rule */
+  .na-card:nth-child(3n) { border-right: 1px solid #f0f0f0; }
+  .na-card:nth-child(2n) { border-right: none; }
+
+  /* remove bottom border on last row */
+  .na-card:nth-last-child(-n+2) { border-bottom: none; }
+
+  .na-header { padding: 32px 16px 24px; }
+  .na-filter-bar { padding: 0 16px 24px; }
+}
        .na-shop-btn {
   position: relative;
   display: inline-block;
@@ -435,6 +474,7 @@ export default function ShopCatalog() {
                             key={product.product_id}
                             product={product}
                             variants={variants}
+
                         />
                     ))
                 )}
@@ -443,7 +483,7 @@ export default function ShopCatalog() {
             {/* ── FOOTER ── */}
             {!loading && !error && (
                 <div className="na-footer">
-                    <button className="na-shop-btn" onClick={() => window.location.href = '/shop'}>
+                    <button className="na-shop-btn" onClick={() => navigate('/all-product')}>
                         <span>View All</span>
                     </button>
                 </div>

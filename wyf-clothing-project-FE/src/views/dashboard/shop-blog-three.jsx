@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 export default function ShopBlogThree() {
     const [blogs, setBlogs] = useState([]);
     const [loading, setLoading] = useState(true);
-
+    const navigate = useNavigate()
     useEffect(() => {
         const fetch = async () => {
             try {
@@ -112,7 +113,7 @@ export default function ShopBlogThree() {
 
                             {/* Read more */}
                             <a
-                                href={`/blog/${blog.blog_id}`}
+                                href={`/blog-view?id=${blog.blog_id}`}
                                 style={{
                                     fontSize: "0.85rem",
                                     color: "#111",

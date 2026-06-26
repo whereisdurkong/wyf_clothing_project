@@ -4,8 +4,8 @@ import { useState } from 'react';
 const menuItems = [
     { label: 'Product Manager', path: '/admin/admin-all-product', index: '01' },
     { label: 'Category Images', path: '/admin-add-setup', index: '02' },
-    { label: 'Collection Manager', path: '/admin/collections', index: '03' },
-    { label: 'Blog', path: '/admin/blog', index: '04' },
+    { label: 'Collection Manager', path: '/admin/admin-collection', index: '03' },
+    { label: 'Blog', path: '/admin/admin-blog', index: '04' },
     { label: 'Dashboard Image', path: '/admin/dashboard-image', index: '05' },
 ];
 

@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 export default function ShopBlog() {
     const [blog, setBlog] = useState(null);
     const [loading, setLoading] = useState(true);
-
+    const navigate = useNavigate()
     const baseUrl = config.baseApi.replace('/api', '');
 
     useEffect(() => {
