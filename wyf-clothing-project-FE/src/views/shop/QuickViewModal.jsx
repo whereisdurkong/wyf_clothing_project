@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import config from "../../config";
 import FeatherIcon from "feather-icons-react";
+import { useCartFly } from "../../components/CartFlyContext";
 
 function formatPrice(p) {
     if (p === null || p === undefined || p === "") return "";
@@ -48,6 +49,9 @@ const GarmentPlaceholder = () => (
 export default function QuickViewModal({ product, variants: allVariants, onClose, onAddToCart }) {
     const productVariants = allVariants[product.product_id] || [];
     const hasVariants = product.has_variants == "1";
+
+    const { flyToCart } = useCartFly();
+    const addToCartBtnRef = useRef(null);
 
     const [selectedVariant, setSelectedVariant] = useState(() =>
         hasVariants ? getCheapestVariant(productVariants) : null
@@ -162,6 +166,12 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
         if (onAddToCart) onAddToCart(cartItem);
         setAddedFeedback(true);
         setTimeout(() => setAddedFeedback(false), 2000);
+
+        // 🚀 fly to cart
+        flyToCart(
+            activeImage ? `${config.baseApi.replace("/api", "")}${activeImage}` : null,
+            addToCartBtnRef.current
+        );
     };
 
     const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
@@ -694,6 +704,7 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
                             {/* CTA buttons */}
                             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                                 <button
+                                    ref={addToCartBtnRef}
                                     className={`qv-btn-add ${addedFeedback ? "added" : ""}`}
                                     onClick={handleAddToCart}
                                     disabled={isSoldOut}
