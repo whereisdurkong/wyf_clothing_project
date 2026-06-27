@@ -30,7 +30,8 @@ export default function Collection() {
                         style={styles.image}
                     />
                     <span style={styles.year}>
-                        {new Date(col.created_at).getFullYear()}
+                        {/* {new Date(col.created_at).getFullYear()} */}
+                        {col.collection_title}
                     </span>
                 </div>
             ))}

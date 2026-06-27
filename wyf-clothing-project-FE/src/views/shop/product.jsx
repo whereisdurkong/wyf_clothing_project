@@ -726,10 +726,16 @@
 
 import { useSearchParams } from "react-router-dom";
 import axios from "axios";
-
-import { useEffect, useState, useRef } from "react";
 import config from "../../config";
+import { useEffect, useState, useRef } from "react";
+
 import FeatherIcon from 'feather-icons-react';
+
+import { Toast } from '../../components/Notification'
+import Loading from "../../components/Loading";
+
+import { useCartFly } from "../../components/CartFlyContext";
+
 
 // ─── helpers (mirrors AllProduct logic) ───────────────────────────────────────
 
@@ -836,6 +842,9 @@ export default function Product() {
     const [searchParams] = useSearchParams();
     const product_id = searchParams.get("id");
 
+    const { flyToCart } = useCartFly();
+    const addToCartBtnRef = useRef(null);
+
     // data
     const [product, setProduct] = useState(null);
     const [variants, setVariants] = useState([]);
@@ -860,6 +869,8 @@ export default function Product() {
     const [animKey, setAnimKey] = useState(0);
 
     const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
+
+    const [notifications, setNotifications] = useState([]);
 
     // ── attach wheel listener to document when lightbox is open ──────────────
     const setZoomRef = useRef(null);
@@ -921,6 +932,7 @@ export default function Product() {
             } catch (err) {
                 console.error("Unable to fetch product:", err);
                 setError("Failed to load product.");
+                addNotif("Error", "Failed to load product. Please try again.", "error");
             } finally {
                 setLoading(false);
             }
@@ -939,6 +951,14 @@ export default function Product() {
             { src: product.product_image_back, label: "Back" },
             ...extras.map((img, i) => ({ src: img, label: `View ${i + 1}` })),
         ].filter(img => img.src);
+    };
+
+    const addNotif = (title, message, type) => {
+        const id = Date.now();
+        setNotifications(prev => [...prev, { id, title, message, type }]);
+        setTimeout(() => {
+            setNotifications(prev => prev.filter(n => n.id !== id));
+        }, 4000);
     };
 
     const images = getImages();
@@ -1101,9 +1121,7 @@ export default function Product() {
     const resetZoom = () => { setZoom(1); setOffset({ x: 0, y: 0 }); };
 
     // ── render guards ─────────────────────────────────────────────────────────
-    if (loading) return (
-        <div style={styles.centered}><p style={{ color: "#888", fontSize: 14 }}>Loading product…</p></div>
-    );
+    if (loading) return <Loading />;
 
     if (error || !product) return (
         <div style={styles.centered}><p style={{ color: "#c0392b", fontSize: 14 }}>{error || "Product not found."}</p></div>
@@ -1111,6 +1129,39 @@ export default function Product() {
 
     const hasVariants = product.has_variants == '1';
 
+    const AddToCart = () => {
+        // Get existing cart
+        let cart = JSON.parse(localStorage.getItem('cart')) || [];
+
+        // Create cart item with only what you need
+        const cartItem = {
+            product_id: product.product_id,
+            quantity: quantity,
+            variant_size: selectedVariant ? getSizeLabel(selectedVariant.product_variant_size) : null
+        };
+
+        // Check if same product + size already exists
+        const existingIndex = cart.findIndex(item =>
+            item.product_id === cartItem.product_id &&
+            item.variant_size === cartItem.variant_size
+        );
+
+        if (existingIndex !== -1) {
+            cart[existingIndex].quantity += quantity;
+        } else {
+            cart.push(cartItem);
+        }
+
+        localStorage.setItem('cart', JSON.stringify(cart));
+        //xxx
+        addNotif("Added to cart", `${quantity} item(s) added to your cart.`, "success");
+
+        flyToCart(
+            `${config.baseApi.replace("/api", "")}${activeImage}`,
+            addToCartBtnRef.current
+        );
+
+    };
     // ── render ────────────────────────────────────────────────────────────────
     return (
         <div style={{
@@ -1118,6 +1169,19 @@ export default function Product() {
             padding: isMobile ? "15px" : "60px",
             paddingTop: isMobile ? "80px" : "60px", // Added extra top padding for mobile
         }}>
+
+            {/* Toast container */}
+            <div style={{ position: "fixed", bottom: 20, right: 24, zIndex: 9999, width: 340, pointerEvents: "none" }}>
+                {notifications.map(n => (
+                    <div key={n.id} style={{ pointerEvents: "auto" }}>
+                        <Toast {...n} onDismiss={id =>
+                            setNotifications(prev => prev.filter(n => n.id !== id))
+                        } />
+                    </div>
+                ))}
+            </div>
+
+
             <style>{`
                     @keyframes slideDown { 0%{transform:translateY(0)} 50%{transform:translateY(4px)} 100%{transform:translateY(0)} }
                     @keyframes slideLeft { 0%{transform:translateX(0)} 50%{transform:translateX(-4px)} 100%{transform:translateX(0)} }
@@ -1480,6 +1544,7 @@ export default function Product() {
                     </div>
 
                     <button
+                        ref={addToCartBtnRef}
                         className="add-to-cart-btn"
                         style={{
                             width: "100%",
@@ -1494,6 +1559,7 @@ export default function Product() {
                             opacity: isSoldOut ? 0.5 : 1,
                         }}
                         disabled={isSoldOut}
+                        onClick={AddToCart}
                     >
                         <div className="fill-white" />
                         <div className="fill-black" />

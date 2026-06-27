@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import config from "../../config";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import QuickViewModal from "./QuickViewModal";
 
 function formatPrice(p) {
     if (p === null || p === undefined || p === "") return "";
@@ -92,7 +93,7 @@ const SORT_OPTIONS = [
     { value: "name-desc", label: "Name: Z–A" },
 ];
 
-const ProductCard = ({ product, variants }) => {
+const ProductCard = ({ product, variants, onQuickView }) => {
     const [hovered, setHovered] = useState(false);
     const [frontError, setFrontError] = useState(false);
     const [backError, setBackError] = useState(false);
@@ -175,6 +176,23 @@ const ProductCard = ({ product, variants }) => {
                         alt={`${product.product_name} back`}
                         onError={() => setBackError(true)}
                     />
+                )}
+
+                {product.is_active == '1' && (
+                    <button
+                        className="ap-plus-btn"
+                        onClick={(e) => {
+                            e.stopPropagation();
+
+                            onQuickView(product);
+                        }}
+                        aria-label={`Add ${product.product_name} to cart`}
+                    >
+                        <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <line x1="6" y1="0" x2="6" y2="12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                            <line x1="0" y1="6" x2="12" y2="6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                    </button>
                 )}
             </div>
             <div className="ap-info">
@@ -278,6 +296,8 @@ export default function AllProduct() {
     const sortRef = useRef(null);
     const filterRef = useRef(null);
     const [searchParams] = useSearchParams();
+
+    const [quickViewProduct, setQuickViewProduct] = useState(null);
 
     const category = searchParams.get('category');
     const categoryDisplayName = category
@@ -534,7 +554,7 @@ export default function AllProduct() {
                     position: relative;
                     width: 100%;
                     aspect-ratio: 1 / 1;
-                    background: #f9f9f7;
+                    background: #ffffff;
                     overflow: hidden;
                     margin-bottom: 14px;
                 }
@@ -638,6 +658,42 @@ export default function AllProduct() {
                     .ap-header { padding: 32px 16px 24px; }
                     .ap-sort-btn, .ap-filter-btn { padding: 0 14px; }
                 }
+                    .ap-plus-btn {
+                        position: absolute;
+                        bottom: 10px;
+                        right: 20px;
+                        width: 30px;
+                        height: 30px;
+                        border: 1px solid #111;
+                        background: #fff;
+                        color: #111;
+                        border-radius: 50%;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        cursor: pointer;
+                        z-index: 3;
+                        opacity: 0;
+                        transition: background 0.18s, color 0.18s, opacity 0.2s ease;
+                    }
+                    .ap-plus-btn:hover {
+                        background: #111;
+                        color: #fff;
+                    }
+                        .ap-plus-btn svg {
+                        transition: transform 0.3s ease;
+                    }
+                        .ap-card:hover .ap-plus-btn {
+                        opacity: 1;
+                    }
+                    .ap-plus-btn:hover svg {
+                        transform: rotate(90deg);
+                    }
+                        @media (max-width: 768px) {
+                        .ap-plus-btn {
+                            opacity: 1;
+                        }
+                    }
             `}</style>
 
             <div className="ap-header">
@@ -724,13 +780,31 @@ export default function AllProduct() {
                     <div className="ap-state">No products found.</div>
                 ) : (
                     paginatedProducts.map(product => (
-                        <ProductCard key={product.product_id} product={product} variants={variants} />
+                        <ProductCard
+                            key={product.product_id}
+                            product={product}
+                            variants={variants}
+                            onQuickView={setQuickViewProduct}   // <-- add this prop
+                        />
                     ))
                 )}
             </div>
 
             {!loading && !error && (
                 <Pagination page={page} totalPages={totalPages} onChange={handlePageChange} />
+            )}
+
+            {quickViewProduct && (
+                <QuickViewModal
+                    product={quickViewProduct}
+                    variants={variants}
+                    onClose={() => setQuickViewProduct(null)}
+                    onAddToCart={(item) => {
+                        // optional: show your existing Toast notification here
+                        console.log("Added to cart:", item);
+                        setQuickViewProduct(null);
+                    }}
+                />
             )}
         </div>
     );

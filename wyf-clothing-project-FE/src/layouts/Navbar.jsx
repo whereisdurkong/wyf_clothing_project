@@ -1,9 +1,11 @@
-
 import { FiUser, FiShoppingBag, FiMenu, FiX } from 'react-icons/fi';
 import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from "axios";
 import config from '../config';
+import { useCart } from './CartContext'; // 👈 1. Import the hook
+
+import { useCartFly } from '../components/CartFlyContext';
 
 const topsSubItems = [
     { label: 'Shirts', href: '/all-product?category=tshirt' },
@@ -72,6 +74,8 @@ function ViewMoreItem({ visible, index, isMobile = false, onClick }) {
 }
 
 export default function Navbar() {
+    const { openCart } = useCart(); // 👈 2. Get openCart from context
+
     const [scrolled, setScrolled] = useState(false);
     const [navHovered, setNavHovered] = useState(false);
     const [shopOpen, setShopOpen] = useState(false);
@@ -82,8 +86,38 @@ export default function Navbar() {
     const [mobileCollectionsOpen, setMobileCollectionsOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
     const { pathname } = useLocation();
-
+    const { cartIconRef, bounce } = useCartFly();
     const transparentOnTop = pathname === '/' || pathname === '/dashboard';
+
+    const [cartCount, setCartCount] = useState(() => {
+        try {
+            const cart = JSON.parse(localStorage.getItem("cart")) || [];
+            return cart.length;
+        } catch {
+            return 0;
+        }
+    });
+
+    useEffect(() => {
+        const syncCart = () => {
+            try {
+                const cart = JSON.parse(localStorage.getItem("cart")) || [];
+                setCartCount(cart.length);
+            } catch {
+                setCartCount(0);
+            }
+        };
+
+        window.addEventListener("storage", syncCart);
+
+        // Also poll every second to catch same-tab updates
+        const interval = setInterval(syncCart, 1000);
+
+        return () => {
+            window.removeEventListener("storage", syncCart);
+            clearInterval(interval);
+        };
+    }, []);
 
     useEffect(() => {
         const handleScroll = () => setScrolled(window.scrollY > 10);
@@ -106,7 +140,6 @@ export default function Navbar() {
                 const res = await axios.get(`${config.baseApi}/product/get-all-collection`);
                 const data = res.data || [];
                 setCollections(data);
-                // console.log(data);
             } catch (err) {
                 console.log('Unable to fetch all collections: ', err);
             }
@@ -148,6 +181,14 @@ export default function Navbar() {
 
     return (
         <>
+            <style>{`
+    @keyframes cartBounce {
+        0%,100% { transform: scale(1) rotate(0deg); }
+        20%     { transform: scale(1.35) rotate(-12deg); }
+        50%     { transform: scale(1.2) rotate(8deg); }
+        75%     { transform: scale(1.1) rotate(-4deg); }
+    }
+`}</style>
             <nav
                 onMouseEnter={() => setNavHovered(true)}
                 onMouseLeave={() => setNavHovered(false)}
@@ -166,7 +207,7 @@ export default function Navbar() {
                     boxShadow: scrolled ? '0 2px 10px rgba(0,0,0,0.08)' : 'none',
                 }}
             >
-                {/* Mobile Menu Button - Only visible on mobile */}
+                {/* Mobile Menu Button */}
                 {isMobile && (
                     <button
                         onClick={toggleMobileMenu}
@@ -188,10 +229,9 @@ export default function Navbar() {
                     </button>
                 )}
 
-                {/* Desktop Left Navigation - Only visible on desktop */}
+                {/* Desktop Left Navigation */}
                 {!isMobile && (
                     <div style={{ display: 'flex', gap: '32px', alignItems: 'center' }}>
-                        {/* Shop with Dropdown */}
                         <div
                             onMouseEnter={() => setShopOpen(true)}
                             onMouseLeave={() => setShopOpen(false)}
@@ -221,8 +261,8 @@ export default function Navbar() {
                                 transform: shopOpen ? 'translateY(0)' : 'translateY(-6px)',
                                 transition: 'max-height 0.38s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease, transform 0.28s ease',
                                 boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                                overflow: 'visible',   // ← allows flyout to escape
-                                visibility: shopOpen ? 'visible' : 'hidden',  // ← replaces maxHeight clipping
+                                overflow: 'visible',
+                                visibility: shopOpen ? 'visible' : 'hidden',
                             }}>
                                 <div style={{
                                     height: '3px',
@@ -244,7 +284,6 @@ export default function Navbar() {
                             </div>
                         </div>
 
-                        {/* Collections with Dropdown */}
                         <div
                             onMouseEnter={() => setCollectionsOpen(true)}
                             onMouseLeave={() => setCollectionsOpen(false)}
@@ -303,13 +342,11 @@ export default function Navbar() {
                                                     visible={collectionsOpen}
                                                 />
                                             ))}
-
                                             <div style={{
                                                 height: '1px',
                                                 background: '#eeeeee',
                                                 margin: '8px 24px',
                                             }} />
-
                                             <ViewMoreItem visible={collectionsOpen} index={Math.min(collections.length, 5)} />
                                         </>
                                     )}
@@ -342,13 +379,53 @@ export default function Navbar() {
                     <a href="/auth/login" style={{ color: textColor, transition: 'color 0.3s ease', display: 'flex', alignItems: 'center' }}>
                         <FiUser size={18} />
                     </a>
-                    <a href="/cart" style={{ color: textColor, transition: 'color 0.3s ease', display: 'flex', alignItems: 'center' }}>
+
+                    <button
+                        ref={cartIconRef}          // ← add this
+                        onClick={openCart}
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: textColor,
+                            transition: 'color 0.3s ease',
+                            display: 'flex',
+                            alignItems: 'center',
+                            padding: 0,
+                            position: 'relative',
+                            // bounce animation
+                            animation: bounce ? 'cartBounce 0.5s cubic-bezier(.36,.07,.19,.97)' : 'none',
+                        }}
+                        aria-label="Open cart"
+                    >
                         <FiShoppingBag size={18} />
-                    </a>
+                        {cartCount > 0 && (
+                            <span style={{
+                                position: 'absolute',
+                                top: '-6px',
+                                right: '-6px',
+                                background: '#111',
+                                color: isTransparent ? '#111' : '#fff',
+                                backgroundColor: isTransparent ? '#fff' : '#111',
+                                fontSize: '9px',
+                                fontWeight: '700',
+                                width: '16px',
+                                height: '16px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                lineHeight: 1,
+                                pointerEvents: 'none',
+                            }}>
+                                {cartCount > 99 ? '99+' : cartCount}
+                            </span>
+                        )}
+                    </button>
                 </div>
             </nav>
 
-            {/* Mobile Menu Overlay - Only visible when mobile menu is open */}
+            {/* Mobile Menu Overlay */}
             {isMobile && (
                 <div style={{
                     position: 'fixed',
@@ -363,12 +440,7 @@ export default function Navbar() {
                     overflowY: 'auto',
                     padding: '20px',
                 }}>
-                    <div style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '4px',
-                    }}>
-                        {/* Shop Mobile */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div>
                             <div
                                 onClick={() => setMobileShopOpen(!mobileShopOpen)}
@@ -381,11 +453,7 @@ export default function Navbar() {
                                     cursor: 'pointer',
                                 }}
                             >
-                                <span style={{
-                                    fontSize: '16px',
-                                    fontWeight: '600',
-                                    color: '#111',
-                                }}>Shop</span>
+                                <span style={{ fontSize: '16px', fontWeight: '600', color: '#111' }}>Shop</span>
                                 <span style={{
                                     fontSize: '20px',
                                     transform: mobileShopOpen ? 'rotate(90deg)' : 'rotate(0)',
@@ -408,7 +476,6 @@ export default function Navbar() {
                             </div>
                         </div>
 
-                        {/* Collections Mobile */}
                         <div>
                             <div
                                 onClick={() => setMobileCollectionsOpen(!mobileCollectionsOpen)}
@@ -421,11 +488,7 @@ export default function Navbar() {
                                     cursor: 'pointer',
                                 }}
                             >
-                                <span style={{
-                                    fontSize: '16px',
-                                    fontWeight: '600',
-                                    color: '#111',
-                                }}>Collections</span>
+                                <span style={{ fontSize: '16px', fontWeight: '600', color: '#111' }}>Collections</span>
                                 <span style={{
                                     fontSize: '20px',
                                     transform: mobileCollectionsOpen ? 'rotate(90deg)' : 'rotate(0)',
@@ -439,11 +502,7 @@ export default function Navbar() {
                                 transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             }}>
                                 {collections.length === 0 ? (
-                                    <div style={{
-                                        padding: '12px 0',
-                                        fontSize: '14px',
-                                        color: '#999',
-                                    }}>
+                                    <div style={{ padding: '12px 0', fontSize: '14px', color: '#999' }}>
                                         No collections found
                                     </div>
                                 ) : (
@@ -476,7 +535,6 @@ export default function Navbar() {
                             </div>
                         </div>
 
-                        {/* About Us Mobile */}
                         <a
                             href="/about"
                             onClick={closeMobileMenu}
@@ -569,52 +627,47 @@ function DropdownItem({ item, index, visible }) {
                 )}
             </a>
 
-            {/* 👇 ADD THIS BRIDGE - fills the gap between the item and the submenu */}
-            {
-                hasSubItems && (
-                    <div style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: '100%',
-                        width: '12px',
-                        height: '100%',
-                        background: 'transparent',
-                        pointerEvents: 'all',
-                    }} />
-                )
-            }
+            {hasSubItems && (
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: '100%',
+                    width: '12px',
+                    height: '100%',
+                    background: 'transparent',
+                    pointerEvents: 'all',
+                }} />
+            )}
 
-            {
-                hasSubItems && (
+            {hasSubItems && (
+                <div style={{
+                    position: 'absolute',
+                    top: '-3px',
+                    left: '100%',
+                    width: '200px',
+                    background: '#ffffff',
+                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                    pointerEvents: subOpen ? 'all' : 'none',
+                    opacity: subOpen ? 1 : 0,
+                    transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
+                    transition: 'opacity 0.22s ease, transform 0.22s ease',
+                    overflow: 'hidden',
+                }}>
                     <div style={{
-                        position: 'absolute',
-                        top: '-3px',
-                        left: '100%',          // ← keep as-is
-                        width: '200px',
-                        background: '#ffffff',
-                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                        pointerEvents: subOpen ? 'all' : 'none',
-                        opacity: subOpen ? 1 : 0,
-                        transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
-                        transition: 'opacity 0.22s ease, transform 0.22s ease',
-                        overflow: 'hidden',
-                    }}>
-                        <div style={{
-                            height: '3px',
-                            background: '#000000',
-                            width: subOpen ? '100%' : '0%',
-                            transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
-                            transitionDelay: '0.05s',
-                        }} />
-                        <div style={{ padding: '14px 0 18px' }}>
-                            {item.subItems.map((sub, si) => (
-                                <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
-                            ))}
-                        </div>
+                        height: '3px',
+                        background: '#000000',
+                        width: subOpen ? '100%' : '0%',
+                        transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
+                        transitionDelay: '0.05s',
+                    }} />
+                    <div style={{ padding: '14px 0 18px' }}>
+                        {item.subItems.map((sub, si) => (
+                            <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
+                        ))}
                     </div>
-                )
-            }
-        </div >
+                </div>
+            )}
+        </div>
     );
 }
 

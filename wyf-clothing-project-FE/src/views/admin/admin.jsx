@@ -6,7 +6,7 @@ const menuItems = [
     { label: 'Category Images', path: '/admin-add-setup', index: '02' },
     { label: 'Collection Manager', path: '/admin/admin-collection', index: '03' },
     { label: 'Blog', path: '/admin/admin-blog', index: '04' },
-    { label: 'Dashboard Image', path: '/admin/dashboard-image', index: '05' },
+    { label: 'Dashboard Image', path: '/admin/admin-dashboard', index: '05' },
 ];
 
 export default function Admin() {

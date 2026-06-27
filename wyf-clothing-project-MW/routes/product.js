@@ -243,6 +243,53 @@ const CollectionMaster = db.define('product_collection_master', {
     tableName: 'product_collection_master'
 })
 
+const VariantMaster = db.define('product_variant_master', {
+    product_variant_id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true
+    },
+    product_id: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_variant_size: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_variant_quantity: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_variant_price: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    product_variant_sale_price: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    created_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_by: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+    updated_at: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
+
+}, {
+    freezeTableName: false,
+    timestamps: false,
+    createdAt: false,
+    updatedAt: false,
+    tableName: 'product_variant_master'
+})
+
 
 // PRODUCTS
 router.post('/add-product', upload.fields([
@@ -412,6 +459,21 @@ router.get('/get-all-product-variant', async (req, res, next) => {
     }
 })
 
+router.get('/get-variant-by-id-variant', async (req, res, next) => {
+    try {
+        const getData = await VariantMaster.findAll({
+            where: {
+                product_id: req.query.id,
+                product_variant_size: req.query.variantSize
+            }
+        });
+        res.json(getData[0]); // ← was missing the response
+    } catch (err) {
+        console.log('Internal Error', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 router.get('/get-product-by-id', async (req, res, next) => {
     try {
         console.log('+++++++++++++++++++===', req.query.id)
@@ -424,7 +486,7 @@ router.get('/get-product-by-id', async (req, res, next) => {
         console.log('triggered /product-by-id')
         res.json(getById[0])
     } catch (err) {
-
+        console.log('Internal Error')
     }
 })
 

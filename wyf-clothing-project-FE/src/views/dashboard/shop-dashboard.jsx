@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import config from "../../config";
+import { useNavigate } from "react-router-dom";
 
 export default function ShopDashboard() {
     const [images, setImages] = useState([]);
     const [current, setCurrent] = useState(0);
+
+    const navigate = useNavigate();
 
     useEffect(() => {
         const fetch = async () => {
@@ -92,7 +95,7 @@ export default function ShopDashboard() {
                 transform: "translateX(-50%)",
                 zIndex: 2,
             }}>
-                <button className="shop-now-btn">
+                <button className="shop-now-btn" onClick={() => navigate('/all-product')}>
                     <span>Shop Now</span>
                 </button>
             </div>

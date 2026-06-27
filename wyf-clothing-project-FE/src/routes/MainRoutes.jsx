@@ -39,6 +39,9 @@ const Product = lazy(() => import('../views/shop/product'));
 const Collection = lazy(() => import('../views/shop/collection'))
 const AllProductCollection = lazy(() => import('../views/shop/all-product-collection'));
 
+//Cart
+const Cart = lazy(() => import('../views/cart/cart'))
+
 const LoadingSpinner = <div>Loading...</div>;
 const withSpinner = (Component) => <Suspense fallback={LoadingSpinner}>{Component}</Suspense>;
 
@@ -147,9 +150,13 @@ const MainRoutes = {
             element: withSpinner(<BlogView />)
         },
         {
-            path: '/admin-dashboard',
+            path: '/admin/admin-dashboard',
             element: withSpinner(<AdminDashboard />)
-        }
+        },
+        // {
+        //     path: '/cart',
+        //     element: withSpinner(<Cart />)
+        // }
 
 
 
