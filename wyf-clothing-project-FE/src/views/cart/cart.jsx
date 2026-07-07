@@ -15,6 +15,7 @@ export default function Cart({ onClose }) {
     const [orderNote, setOrderNote] = useState("");
     const [showNoteInput, setShowNoteInput] = useState(false);
     const [visible, setVisible] = useState(false);
+    const [checkingOut, setCheckingOut] = useState(false);
 
     // Trigger slide-in on mount
     useEffect(() => {
@@ -38,7 +39,7 @@ export default function Cart({ onClose }) {
                             axios.get(`${config.baseApi}/product/get-variant-by-id-variant`, {
                                 params: {
                                     id: item.product_id,
-                                    variantSize: item.variant_size, // must match wha<div style={styles.itemDetails}>t's saved in localStorage
+                                    variantSize: item.variant_size, // must match what's saved in localStorage
                                 },
                             }),
                         ])
@@ -55,6 +56,7 @@ export default function Cart({ onClose }) {
                             price: variantRes.data?.product_variant_price || productRes.data?.price || 0,
                             sale_price: variantRes.data?.product_variant_sale_price || null,
                             variant_size: variantRes.data?.product_variant_size || item.variant_size,
+                            variant_id: variantRes.data?.product_variant_id || item.variant_id || null,
                         };
                     })
                 );
@@ -102,7 +104,51 @@ export default function Cart({ onClose }) {
 
     const formatPrice = (amount) =>
         `₱${amount.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`;
-    const baseUrl = config.baseApi.replace("/api", "");
+
+    // Mirrors Product.jsx's handleBuyNow auth flow
+    const handleCheckout = async () => {
+        if (cart.length === 0 || checkingOut) return;
+
+        const token = localStorage.getItem('access_token');
+
+        if (!token) {
+            navigate('/auth/login');
+            return;
+        }
+
+        setCheckingOut(true);
+        try {
+            await axios.get(`${config.baseApi}/users/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // token is valid — carry the order note along
+            if (orderNote) {
+                sessionStorage.setItem('order_note', orderNote);
+            } else {
+                sessionStorage.removeItem('order_note');
+            }
+
+            // Build repeated query params: product_id, quantity, and variant_id
+            // each appear once per cart item, in matching order, e.g.
+            // ?product_id=1&product_id=2&quantity=2&quantity=1&variant_id=&variant_id=9
+            const params = new URLSearchParams();
+            cart.forEach((item) => {
+                params.append('product_id', item.product_id);
+                params.append('quantity', item.quantity);
+                // keep array positions aligned even when an item has no variant
+                params.append('variant_id', item.variant_id ?? '');
+            });
+
+            navigate(`/cart-checkout?${params.toString()}`);
+        } catch (err) {
+            localStorage.removeItem('access_token');
+            navigate('/auth/login');
+        } finally {
+            setCheckingOut(false);
+        }
+    };
+
     return (
         <>
             <style>{`
@@ -203,7 +249,7 @@ export default function Cart({ onClose }) {
                                         {item.product_image_front ? (
                                             <img
 
-                                                src={`${baseUrl}${item.product_image_front}`}
+                                                src={item.product_image_front}
                                                 alt={item.name || "Product"}
                                                 style={styles.image}
                                             />
@@ -295,15 +341,17 @@ export default function Cart({ onClose }) {
                         <button
                             style={{
                                 ...styles.checkoutBtn,
-                                ...(cart.length === 0 ? styles.checkoutBtnDisabled : {}),
+                                ...(cart.length === 0 || checkingOut ? styles.checkoutBtnDisabled : {}),
                             }}
-                            disabled={cart.length === 0}
-                            onClick={() => {
-                                window.location.href = "/checkout";
-                            }}
+                            className="cart-checkout-btn"
+                            disabled={cart.length === 0 || checkingOut}
+                            onClick={handleCheckout}
                         >
-                            Checkout&nbsp;<span style={{ color: "#999" }}>•</span>&nbsp;
-                            {formatPrice(total)}
+                            {checkingOut ? (
+                                "Checking..."
+                            ) : (
+                                <>Checkout&nbsp;<span style={{ color: "#999" }}>•</span>&nbsp;{formatPrice(total)}</>
+                            )}
                         </button>
                     </div>
                 </div>

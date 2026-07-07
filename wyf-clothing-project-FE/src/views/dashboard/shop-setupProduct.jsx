@@ -121,8 +121,8 @@ export default function ShopSetupProduct() {
                             <div
                                 style={{
                                     ...styles.imageLayer,
-                                    backgroundImage: setupData
-                                        ? `url(${config.baseApi.replace('/api', '')}${setupData[key]})`
+                                    backgroundImage: setupData?.[key]
+                                        ? `url(${setupData[key]})`
                                         : "none",
                                     backgroundColor: setupData ? "transparent" : "#222",
                                 }}

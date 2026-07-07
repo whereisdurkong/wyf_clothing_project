@@ -1,5 +1,7 @@
 import { lazy, Suspense } from 'react';
 import MainLayout from '../layouts/MainLayout';
+import Loading from '../components/Loading';
+import RequireToken from './RequireToken';
 
 //Dashboard
 const Dashboard = lazy(() => import('../views/dashboard'));
@@ -30,6 +32,8 @@ const AdminBlogView = lazy(() => import('../views/admin/admin-blog-view'));
 const AddDashboard = lazy(() => import('../views/admin/add-dashboard'))
 const AdminDashboard = lazy(() => import('../views/admin/admin-dashboard'));
 
+const Allusers = lazy(() => import('../views/auth/all-users'))
+
 const Admin = lazy(() => import('../views/admin/admin'));
 
 //Shop
@@ -41,9 +45,36 @@ const AllProductCollection = lazy(() => import('../views/shop/all-product-collec
 
 //Cart
 const Cart = lazy(() => import('../views/cart/cart'))
+const CartCheckout = lazy(() => import('../views/cart/cart-checkout'));
+const CheckoutLoading = lazy(() => import('../views/cart/checkout-loading'));
 
-const LoadingSpinner = <div>Loading...</div>;
+//AUTH
+const Verify = lazy(() => import('../views/auth/verify'))
+const RequireAuth = lazy(() => import('../views/auth/RequireAuth'));
+const AdminRegister = lazy(() => import('../views/auth/Adminregister'))
+
+const Profile = lazy(() => import('../views/auth/profile'))
+
+//ORDER
+
+const Order = lazy(() => import('../views/order/admin-orders'))
+const AdminOrderByID = lazy(() => import('../views/order/admin-orderbyid'))
+
+const TrackingOrder = lazy(() => import('../views/order/trackingorder'))
+
+const MyOrder = lazy(() => import('../views/order/my-order'))
+const OrderById = lazy(() => import('../views/order/orderbyid'))
+
+
+const LoadingSpinner = <Loading />;
 const withSpinner = (Component) => <Suspense fallback={LoadingSpinner}>{Component}</Suspense>;
+
+const withAuth = (Component) => (
+    <RequireToken>
+        <Suspense fallback={LoadingSpinner}>{Component}</Suspense>
+    </RequireToken>
+);
+
 
 const MainRoutes = {
     path: '/',
@@ -52,6 +83,10 @@ const MainRoutes = {
         {
             path: '/',
             element: withSpinner(<Dashboard />)
+        },
+        {
+            path: '/admin-register',
+            element: withAuth(<AdminRegister />)
         },
         {
             path: '/dashboard',
@@ -63,15 +98,15 @@ const MainRoutes = {
         },
         {
             path: '/admin-add-product',
-            element: withSpinner(<AddProduct />)
+            element: withAuth(<AddProduct />)
         },
         {
             path: '/admin-add-collection',
-            element: withSpinner(<AddCollection />)
+            element: withAuth(<AddCollection />)
         },
         {
             path: '/admin-add-setup',
-            element: withSpinner(<AddSetup />)
+            element: withAuth(<AddSetup />)
         },
         {
             path: '/collection',
@@ -83,7 +118,7 @@ const MainRoutes = {
         },
         {
             path: '/admin-add-blog',
-            element: withSpinner(<AddBlog />)
+            element: withAuth(<AddBlog />)
         },
         {
             path: '/shop-blog',
@@ -95,7 +130,7 @@ const MainRoutes = {
         },
         {
             path: '/admin-add-dashboard',
-            element: withSpinner(<AddDashboard />)
+            element: withAuth(<AddDashboard />)
         },
         {
             path: '/shop-dashboard',
@@ -111,19 +146,19 @@ const MainRoutes = {
         },
         {
             path: '/admin-panel',
-            element: withSpinner(<Admin />)
+            element: withAuth(<Admin />)
         },
         {
             path: '/admin/admin-all-product',
-            element: withSpinner(<AdminAllProduct />)
+            element: withAuth(<AdminAllProduct />)
         },
         {
             path: '/admin/admin-product-view',
-            element: withSpinner(<AdminProductView />)
+            element: withAuth(<AdminProductView />)
         },
         {
             path: '/admin/admin-collection',
-            element: withSpinner(<AdminCollection />)
+            element: withAuth(<AdminCollection />)
         },
         {
             path: '/collections',
@@ -131,15 +166,15 @@ const MainRoutes = {
         },
         {
             path: '/admin/admin-collection-view',
-            element: withSpinner(<AdminCollectionView />)
+            element: withAuth(<AdminCollectionView />)
         },
         {
             path: '/admin/admin-blog',
-            element: withSpinner(<AdminBlog />)
+            element: withAuth(<AdminBlog />)
         },
         {
             path: '/admin/admin-blog-view',
-            element: withSpinner(<AdminBlogView />)
+            element: withAuth(<AdminBlogView />)
         },
         {
             path: '/all-collections',
@@ -151,12 +186,50 @@ const MainRoutes = {
         },
         {
             path: '/admin/admin-dashboard',
-            element: withSpinner(<AdminDashboard />)
+            element: withAuth(<AdminDashboard />)
         },
-        // {
-        //     path: '/cart',
-        //     element: withSpinner(<Cart />)
-        // }
+        {
+            path: '/auth/verify',
+            element: withSpinner(<Verify />)
+        },
+        {
+            path: '/cart-checkout',
+            element: withSpinner(<CartCheckout />)
+        },
+        {
+            path: '/checkout-loading',
+            element: withSpinner(<CheckoutLoading />)
+        },
+        {
+            path: '/orders',
+            element: withAuth(<Order />)
+        },
+        {
+            path: '/order/order',
+            element: withAuth(<AdminOrderByID />)
+        },
+        {
+            path: '/tracking-order',
+            element: withSpinner(<TrackingOrder />)
+        },
+        {
+            path: '/my-orders',
+            element: withAuth(<MyOrder />)
+        },
+        {
+            path: '/my-order/order',
+            element: withAuth(<OrderById />)
+        },
+        {
+            path: '/profile',
+            element: withAuth(<Profile />)
+        },
+        {
+            path: '/all-users',
+            element: withAuth(<Allusers />)
+        }
+
+
 
 
 

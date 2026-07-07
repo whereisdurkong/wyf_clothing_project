@@ -10,7 +10,9 @@ export default function Collection() {
         const fetch = async () => {
             try {
                 const res = await axios.get(`${config.baseApi}/product/get-all-collection`);
-                setCollections(res.data || []);
+
+                const data = res.data.filter(active => active.is_active === '1');
+                setCollections(data || []);
             } catch (err) {
                 console.log("Unable to fetch data: ", err);
             }
@@ -25,7 +27,7 @@ export default function Collection() {
             {collections.map((col) => (
                 <div key={col.collection_id} style={styles.card} onClick={() => navigate('/all-collections?id=' + col.collection_id)}>
                     <img
-                        src={`${baseUrl}${col.collection_images}`}
+                        src={col.collection_images}
                         alt={col.collection_title}
                         style={styles.image}
                     />

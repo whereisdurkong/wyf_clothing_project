@@ -17,10 +17,20 @@ const styles = {
     header: {
         marginBottom: "24px",
         display: "flex",
-        alignItems: "flex-end",
+        alignItems: "center",
         justifyContent: "space-between",
         borderBottom: "2px solid #0a0a0a",
         paddingBottom: "16px",
+    },
+    addButton: {
+        padding: '10px 20px',
+        backgroundColor: '#3b3b3b',
+        color: '#fff',
+        border: 'none',
+        borderRadius: '6px',
+        fontSize: '14px',
+        fontWeight: 600,
+        cursor: 'pointer',
     },
     title: {
         fontSize: "22px",
@@ -247,7 +257,7 @@ export default function AdminAllProduct() {
         );
     };
 
-    const clean = (str) => str?.replace(/^"|"$/g, "") || "—";
+    const clean = (str) => str || "—";
 
     if (loading) {
         return (
@@ -265,6 +275,9 @@ export default function AdminAllProduct() {
                     <h1 style={styles.title}>Product Inventory</h1>
                     <p style={styles.subtitle}>{products.length} products total</p>
                 </div>
+                <button style={styles.addButton} onClick={() => navigate("/admin-add-product")}>
+                    Add Product
+                </button>
             </div>
 
             <div style={styles.tableWrapper}>

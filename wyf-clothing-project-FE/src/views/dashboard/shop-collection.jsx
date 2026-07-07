@@ -163,7 +163,7 @@ export default function ShopCollection() {
                     <div className="col-item" key={col.collection_id} onClick={() => navigate('/all-collections?id=' + col.collection_id)}>
                         <img
                             className="col-img"
-                            src={`${baseUrl}${col.collection_images}`}
+                            src={col.collection_images}
                             alt={col.collection_title}
                             onError={(e) => { e.target.style.background = '#222'; e.target.style.display = 'none'; }}
                         />

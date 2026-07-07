@@ -3,8 +3,7 @@ import { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import axios from "axios";
 import config from '../config';
-import { useCart } from './CartContext'; // 👈 1. Import the hook
-
+import { useCart } from './CartContext';
 import { useCartFly } from '../components/CartFlyContext';
 
 const topsSubItems = [
@@ -58,23 +57,49 @@ function ViewMoreItem({ visible, index, isMobile = false, onClick }) {
     return (
         <a
             href="/collections"
-            onMouseEnter={() => !isMobile && setHovered(true)}
+            onMouseEnter={() => !isMobile && setHovered(true)
+            }
             onMouseLeave={() => !isMobile && setHovered(false)}
             onClick={onClick}
             style={styles}
         >
             View All Collections
-            <span style={{
+            < span style={{
                 fontSize: '14px',
                 transform: hovered ? 'translateX(3px)' : 'translateX(0)',
                 transition: 'transform 0.2s ease',
-            }}>→</span>
-        </a>
+            }}>→</span >
+        </a >
+    );
+}
+
+function UserDropdownLink({ href, label }) {
+    const [hovered, setHovered] = useState(false);
+    return (
+        <a
+            href={href}
+            onMouseEnter={() => setHovered(true)
+            }
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                display: 'block',
+                padding: '10px 18px',
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#111',
+                textDecoration: 'none',
+                background: hovered ? '#f5f5f5' : 'transparent',
+                transition: 'background 0.15s ease',
+                letterSpacing: '0.3px',
+            }}
+        >
+            {label}
+        </a >
     );
 }
 
 export default function Navbar() {
-    const { openCart } = useCart(); // 👈 2. Get openCart from context
+    const { openCart } = useCart();
 
     const [scrolled, setScrolled] = useState(false);
     const [navHovered, setNavHovered] = useState(false);
@@ -85,9 +110,13 @@ export default function Navbar() {
     const [mobileShopOpen, setMobileShopOpen] = useState(false);
     const [mobileCollectionsOpen, setMobileCollectionsOpen] = useState(false);
     const [isMobile, setIsMobile] = useState(false);
+    const [user, setUser] = useState(null);
+    const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+
     const { pathname } = useLocation();
     const { cartIconRef, bounce } = useCartFly();
     const transparentOnTop = pathname === '/' || pathname === '/dashboard';
+    const isAdmin = user?.role === 'admin' || user?.user_metadata?.role === 'admin';
 
     const [cartCount, setCartCount] = useState(() => {
         try {
@@ -98,6 +127,32 @@ export default function Navbar() {
         }
     });
 
+    const fetchUser = () => {
+        const token = localStorage.getItem('access_token');
+        if (!token) {
+            setUser(null);
+            return;
+        }
+
+        axios.get(`${config.baseApi}/users/me`, {
+            headers: { Authorization: `Bearer ${token}` }
+        })
+            .then(res => setUser(res.data.user))
+            .catch(() => {
+                localStorage.removeItem('access_token');
+                setUser(null);
+            });
+    };
+
+    useEffect(() => {
+        fetchUser();
+    }, [pathname]);
+
+    useEffect(() => {
+        window.addEventListener('auth-changed', fetchUser);
+        return () => window.removeEventListener('auth-changed', fetchUser);
+    }, []);
+
     useEffect(() => {
         const syncCart = () => {
             try {
@@ -107,12 +162,8 @@ export default function Navbar() {
                 setCartCount(0);
             }
         };
-
         window.addEventListener("storage", syncCart);
-
-        // Also poll every second to catch same-tab updates
         const interval = setInterval(syncCart, 1000);
-
         return () => {
             window.removeEventListener("storage", syncCart);
             clearInterval(interval);
@@ -126,26 +177,31 @@ export default function Navbar() {
     }, []);
 
     useEffect(() => {
-        const handleResize = () => {
-            setIsMobile(window.innerWidth < 1024);
-        };
+        const handleResize = () => setIsMobile(window.innerWidth < 1024);
         handleResize();
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
     }, []);
 
     useEffect(() => {
-        const fetch = async () => {
+        const fetchCollections = async () => {
             try {
                 const res = await axios.get(`${config.baseApi}/product/get-all-collection`);
-                const data = res.data || [];
-                setCollections(data);
+                setCollections(res.data || []);
             } catch (err) {
                 console.log('Unable to fetch all collections: ', err);
             }
         };
-        fetch();
+        fetchCollections();
     }, []);
+
+    const handleLogout = () => {
+        localStorage.removeItem('access_token');
+        window.dispatchEvent(new Event('auth-changed')); // add this
+        setUser(null);
+        setUserDropdownOpen(false);
+        window.location.href = '/auth/login';
+    };
 
     const isTransparent = transparentOnTop && !scrolled && !navHovered && !mobileMenuOpen;
     const textColor = isTransparent ? '#ffffff' : '#000000';
@@ -165,11 +221,7 @@ export default function Navbar() {
 
     const toggleMobileMenu = () => {
         setMobileMenuOpen(!mobileMenuOpen);
-        if (!mobileMenuOpen) {
-            document.body.style.overflow = 'hidden';
-        } else {
-            document.body.style.overflow = 'unset';
-        }
+        document.body.style.overflow = !mobileMenuOpen ? 'hidden' : 'unset';
     };
 
     const closeMobileMenu = () => {
@@ -182,13 +234,14 @@ export default function Navbar() {
     return (
         <>
             <style>{`
-    @keyframes cartBounce {
-        0%,100% { transform: scale(1) rotate(0deg); }
-        20%     { transform: scale(1.35) rotate(-12deg); }
-        50%     { transform: scale(1.2) rotate(8deg); }
-        75%     { transform: scale(1.1) rotate(-4deg); }
-    }
-`}</style>
+                @keyframes cartBounce {
+                    0%,100% { transform: scale(1) rotate(0deg); }
+                    20%     { transform: scale(1.35) rotate(-12deg); }
+                    50%     { transform: scale(1.2) rotate(8deg); }
+                    75%     { transform: scale(1.1) rotate(-4deg); }
+                }
+            `}</style>
+
             <nav
                 onMouseEnter={() => setNavHovered(true)}
                 onMouseLeave={() => setNavHovered(false)}
@@ -238,17 +291,11 @@ export default function Navbar() {
                             style={{ position: 'relative' }}
                         >
                             <a href="/all-product" style={linkStyle}>Shop</a>
-
                             <div style={{
-                                position: 'absolute',
-                                top: '100%',
-                                left: '-24px',
-                                width: '220px',
-                                height: '24px',
-                                background: 'transparent',
-                                pointerEvents: 'all',
+                                position: 'absolute', top: '100%', left: '-24px',
+                                width: '220px', height: '24px',
+                                background: 'transparent', pointerEvents: 'all',
                             }} />
-
                             <div style={{
                                 position: 'absolute',
                                 top: 'calc(100% + 20px)',
@@ -265,20 +312,14 @@ export default function Navbar() {
                                 visibility: shopOpen ? 'visible' : 'hidden',
                             }}>
                                 <div style={{
-                                    height: '3px',
-                                    background: '#000000',
+                                    height: '3px', background: '#000000',
                                     width: shopOpen ? '100%' : '0%',
                                     transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)',
                                     transitionDelay: '0.05s',
                                 }} />
                                 <div style={{ padding: '14px 0 18px' }}>
                                     {shopItems.map((item, i) => (
-                                        <DropdownItem
-                                            key={item.href}
-                                            item={item}
-                                            index={i}
-                                            visible={shopOpen}
-                                        />
+                                        <DropdownItem key={item.href} item={item} index={i} visible={shopOpen} />
                                     ))}
                                 </div>
                             </div>
@@ -290,17 +331,11 @@ export default function Navbar() {
                             style={{ position: 'relative' }}
                         >
                             <a href="/collections" style={linkStyle}>Collections</a>
-
                             <div style={{
-                                position: 'absolute',
-                                top: '100%',
-                                left: '-24px',
-                                width: '240px',
-                                height: '24px',
-                                background: 'transparent',
-                                pointerEvents: 'all',
+                                position: 'absolute', top: '100%', left: '-24px',
+                                width: '240px', height: '24px',
+                                background: 'transparent', pointerEvents: 'all',
                             }} />
-
                             <div style={{
                                 position: 'absolute',
                                 top: 'calc(100% + 20px)',
@@ -316,20 +351,14 @@ export default function Navbar() {
                                 overflow: 'hidden',
                             }}>
                                 <div style={{
-                                    height: '3px',
-                                    background: '#000000',
+                                    height: '3px', background: '#000000',
                                     width: collectionsOpen ? '100%' : '0%',
                                     transition: 'width 0.45s cubic-bezier(0.4,0,0.2,1)',
                                     transitionDelay: '0.05s',
                                 }} />
                                 <div style={{ padding: '14px 0 18px' }}>
                                     {collections.length === 0 ? (
-                                        <div style={{
-                                            padding: '11px 24px',
-                                            fontSize: '13px',
-                                            color: '#999',
-                                            fontStyle: 'italic',
-                                        }}>
+                                        <div style={{ padding: '11px 24px', fontSize: '13px', color: '#999', fontStyle: 'italic' }}>
                                             No collections found
                                         </div>
                                     ) : (
@@ -342,11 +371,7 @@ export default function Navbar() {
                                                     visible={collectionsOpen}
                                                 />
                                             ))}
-                                            <div style={{
-                                                height: '1px',
-                                                background: '#eeeeee',
-                                                margin: '8px 24px',
-                                            }} />
+                                            <div style={{ height: '1px', background: '#eeeeee', margin: '8px 24px' }} />
                                             <ViewMoreItem visible={collectionsOpen} index={Math.min(collections.length, 5)} />
                                         </>
                                     )}
@@ -355,6 +380,7 @@ export default function Navbar() {
                         </div>
 
                         <a href="/about" style={linkStyle}>About Us</a>
+                        {isAdmin && <a href="/admin-panel" style={linkStyle}>Admin</a>}
                     </div>
                 )}
 
@@ -365,7 +391,11 @@ export default function Navbar() {
                     alignItems: 'center',
                     gridColumn: isMobile ? '2' : 'auto'
                 }}>
-                    <img src={logoSrc} alt="Logo" style={{ height: isMobile ? '28px' : '30px', width: 'auto', transition: 'opacity 0.3s ease' }} />
+                    <img
+                        src={logoSrc}
+                        alt="Logo"
+                        style={{ height: isMobile ? '28px' : '30px', width: 'auto', transition: 'opacity 0.3s ease' }}
+                    />
                 </a>
 
                 {/* Right Icons */}
@@ -376,12 +406,146 @@ export default function Navbar() {
                     justifyContent: 'flex-end',
                     gridColumn: isMobile ? '3' : 'auto'
                 }}>
-                    <a href="/auth/login" style={{ color: textColor, transition: 'color 0.3s ease', display: 'flex', alignItems: 'center' }}>
-                        <FiUser size={18} />
-                    </a>
+                    {/* User Dropdown */}
+                    <div
+                        style={{ position: 'relative' }}
+                        onMouseEnter={() => !isMobile && setUserDropdownOpen(true)}
+                        onMouseLeave={() => !isMobile && setUserDropdownOpen(false)}
+                    >
+                        <button
+                            onClick={() => isMobile && setUserDropdownOpen(!userDropdownOpen)}
+                            style={{
+                                background: 'none',
+                                border: 'none',
+                                cursor: 'pointer',
+                                color: textColor,
+                                transition: 'color 0.3s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: 0,
+                            }}
+                        >
+                            <FiUser size={18} />
+                            {/* {user && !isMobile && (
+                                <span style={{
+                                    fontSize: '11px',
+                                    fontWeight: '700',
+                                    letterSpacing: '1px',
+                                    textTransform: 'uppercase',
+                                }}>
+                                    {user.user_metadata?.name?.split(' ')[0] || 'Account'}
+                                </span>
+                            )} */}
+                        </button>
 
+                        {/* Hover bridge */}
+                        <div style={{
+                            position: 'absolute',
+                            top: '100%',
+                            right: 0,
+                            width: '180px',
+                            height: '16px',
+                            background: 'transparent',
+                            pointerEvents: userDropdownOpen ? 'all' : 'none',
+                        }} />
+
+                        {/* Dropdown panel */}
+                        <div style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 16px)',
+                            right: 0,
+                            width: '200px',
+                            background: '#ffffff',
+                            boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                            pointerEvents: userDropdownOpen ? 'all' : 'none',
+                            opacity: userDropdownOpen ? 1 : 0,
+                            transform: userDropdownOpen ? 'translateY(0)' : 'translateY(-6px)',
+                            transition: 'opacity 0.22s ease, transform 0.22s ease',
+                            zIndex: 100,
+                        }}>
+                            <div style={{
+                                height: '3px',
+                                background: '#000000',
+                                width: userDropdownOpen ? '100%' : '0%',
+                                transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
+                                transitionDelay: '0.05s',
+                            }} />
+
+                            {user ? (
+                                <>
+                                    {/* User info */}
+                                    <div style={{
+                                        padding: '14px 18px 10px',
+                                        borderBottom: '1px solid #f0f0f0',
+                                    }}>
+                                        <div style={{
+                                            fontSize: '13px',
+                                            fontWeight: '700',
+                                            color: '#111',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                        }}>
+                                            {user.user_metadata?.name || 'Account'}
+                                        </div>
+                                        <div style={{
+                                            fontSize: '11px',
+                                            color: '#999',
+                                            marginTop: '2px',
+                                            whiteSpace: 'nowrap',
+                                            overflow: 'hidden',
+                                            textOverflow: 'ellipsis',
+                                        }}>
+                                            {user.email}
+                                        </div>
+                                    </div>
+
+                                    {/* Links */}
+                                    <div style={{ padding: '8px 0' }}>
+                                        <UserDropdownLink href="/my-orders" label="My Orders" />
+                                        <UserDropdownLink href="/profile" label="Profile" />
+                                        {isAdmin && <UserDropdownLink href="/admin-panel" label="Admin" />}
+                                        {isAdmin && <UserDropdownLink href="/orders" label="Order Panel" />}
+                                    </div>
+
+                                    {/* Logout */}
+                                    <div style={{ borderTop: '1px solid #f0f0f0', padding: '8px 0' }}>
+                                        <button
+                                            onClick={handleLogout}
+                                            onMouseEnter={e => e.currentTarget.style.background = '#fdeaea'}
+                                            onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                                            style={{
+                                                width: '100%',
+                                                padding: '10px 18px',
+                                                background: 'none',
+                                                border: 'none',
+                                                textAlign: 'left',
+                                                fontSize: '13px',
+                                                fontWeight: '600',
+                                                color: '#c92a2a',
+                                                cursor: 'pointer',
+                                                fontFamily: 'inherit',
+                                                letterSpacing: '0.3px',
+                                                transition: 'background 0.15s ease',
+                                            }}
+                                        >
+                                            Sign out
+                                        </button>
+                                    </div>
+                                </>
+                            ) : (
+                                <div style={{ padding: '8px 0' }}>
+                                    <UserDropdownLink href="/auth/login" label="Sign in" />
+                                    <UserDropdownLink href="/auth/register" label="Create account" />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Cart */}
                     <button
-                        ref={cartIconRef}          // ← add this
+                        ref={cartIconRef}
                         onClick={openCart}
                         style={{
                             background: 'none',
@@ -393,7 +557,6 @@ export default function Navbar() {
                             alignItems: 'center',
                             padding: 0,
                             position: 'relative',
-                            // bounce animation
                             animation: bounce ? 'cartBounce 0.5s cubic-bezier(.36,.07,.19,.97)' : 'none',
                         }}
                         aria-label="Open cart"
@@ -404,9 +567,6 @@ export default function Navbar() {
                                 position: 'absolute',
                                 top: '-6px',
                                 right: '-6px',
-                                background: '#111',
-                                color: isTransparent ? '#111' : '#fff',
-                                backgroundColor: isTransparent ? '#fff' : '#111',
                                 fontSize: '9px',
                                 fontWeight: '700',
                                 width: '16px',
@@ -417,6 +577,8 @@ export default function Navbar() {
                                 justifyContent: 'center',
                                 lineHeight: 1,
                                 pointerEvents: 'none',
+                                color: isTransparent ? '#111' : '#fff',
+                                backgroundColor: isTransparent ? '#fff' : '#111',
                             }}>
                                 {cartCount > 99 ? '99+' : cartCount}
                             </span>
@@ -441,6 +603,71 @@ export default function Navbar() {
                     padding: '20px',
                 }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+
+                        {/* Mobile user section */}
+                        <div style={{
+                            padding: '14px 0',
+                            borderBottom: '1px solid #f0f0f0',
+                            marginBottom: '4px',
+                        }}>
+                            {user ? (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div>
+                                        <div style={{ fontSize: '14px', fontWeight: '700', color: '#111' }}>
+                                            {user.user_metadata?.name || 'Account'}
+                                        </div>
+                                        <div style={{ fontSize: '12px', color: '#999', marginTop: '2px' }}>
+                                            {user.email}
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={handleLogout}
+                                        style={{
+                                            background: '#fdeaea',
+                                            border: 'none',
+                                            color: '#c92a2a',
+                                            fontSize: '12px',
+                                            fontWeight: '700',
+                                            padding: '6px 12px',
+                                            cursor: 'pointer',
+                                            fontFamily: 'inherit',
+                                        }}
+                                    >
+                                        Sign out
+                                    </button>
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <a href="/auth/login" style={{
+                                        flex: 1,
+                                        textAlign: 'center',
+                                        padding: '10px',
+                                        background: '#111',
+                                        color: '#fff',
+                                        textDecoration: 'none',
+                                        fontSize: '13px',
+                                        fontWeight: '700',
+                                        letterSpacing: '1px',
+                                    }}>
+                                        Sign in
+                                    </a>
+                                    <a href="/auth/register" style={{
+                                        flex: 1,
+                                        textAlign: 'center',
+                                        padding: '10px',
+                                        background: '#f5f5f5',
+                                        color: '#111',
+                                        textDecoration: 'none',
+                                        fontSize: '13px',
+                                        fontWeight: '700',
+                                        letterSpacing: '1px',
+                                    }}>
+                                        Register
+                                    </a>
+                                </div>
+                            )}
+                        </div>
+
                         <div>
                             <div
                                 onClick={() => setMobileShopOpen(!mobileShopOpen)}
@@ -467,11 +694,7 @@ export default function Navbar() {
                                 transition: 'max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                             }}>
                                 {shopItems.map((item) => (
-                                    <MobileDropdownItem
-                                        key={item.href}
-                                        item={item}
-                                        onNavigate={closeMobileMenu}
-                                    />
+                                    <MobileDropdownItem key={item.href} item={item} onNavigate={closeMobileMenu} />
                                 ))}
                             </div>
                         </div>
@@ -524,42 +747,39 @@ export default function Navbar() {
                                                 {col.collection_title}
                                             </a>
                                         ))}
-                                        <ViewMoreItem
-                                            visible={true}
-                                            index={0}
-                                            isMobile={true}
-                                            onClick={closeMobileMenu}
-                                        />
+                                        <ViewMoreItem visible={true} index={0} isMobile={true} onClick={closeMobileMenu} />
                                     </>
                                 )}
                             </div>
                         </div>
 
-                        <a
-                            href="/about"
-                            onClick={closeMobileMenu}
-                            style={{
-                                display: 'block',
-                                padding: '14px 0',
-                                fontSize: '16px',
-                                fontWeight: '600',
-                                color: '#111',
-                                textDecoration: 'none',
-                                borderBottom: '1px solid #f0f0f0',
-                            }}
-                        >
+                        <a href="/about" onClick={closeMobileMenu} style={{
+                            display: 'block', padding: '14px 0', fontSize: '16px',
+                            fontWeight: '600', color: '#111', textDecoration: 'none',
+                            borderBottom: '1px solid #f0f0f0',
+                        }}>
                             About Us
                         </a>
+
+                        {isAdmin && (
+                            <a href="/admin-panel" onClick={closeMobileMenu} style={{
+                                display: 'block', padding: '14px 0', fontSize: '16px',
+                                fontWeight: '600', color: '#111', textDecoration: 'none',
+                                borderBottom: '1px solid #f0f0f0',
+                            }}>
+                                Admin
+                            </a>
+                        )}
                     </div>
-                </div>
-            )}
+                </div >
+            )
+            }
         </>
     );
 }
 
 function CollectionDropdownItem({ collection, index, visible }) {
     const [hovered, setHovered] = useState(false);
-
     return (
         <a
             href={`/all-collections?id=${collection.collection_id}`}
@@ -583,7 +803,7 @@ function CollectionDropdownItem({ collection, index, visible }) {
             }}
         >
             {collection.collection_title}
-        </a>
+        </a >
     );
 }
 
@@ -627,57 +847,56 @@ function DropdownItem({ item, index, visible }) {
                 )}
             </a>
 
-            {hasSubItems && (
-                <div style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: '100%',
-                    width: '12px',
-                    height: '100%',
-                    background: 'transparent',
-                    pointerEvents: 'all',
-                }} />
-            )}
-
-            {hasSubItems && (
-                <div style={{
-                    position: 'absolute',
-                    top: '-3px',
-                    left: '100%',
-                    width: '200px',
-                    background: '#ffffff',
-                    boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
-                    pointerEvents: subOpen ? 'all' : 'none',
-                    opacity: subOpen ? 1 : 0,
-                    transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
-                    transition: 'opacity 0.22s ease, transform 0.22s ease',
-                    overflow: 'hidden',
-                }}>
+            {
+                hasSubItems && (
                     <div style={{
-                        height: '3px',
-                        background: '#000000',
-                        width: subOpen ? '100%' : '0%',
-                        transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
-                        transitionDelay: '0.05s',
+                        position: 'absolute', top: 0, left: '100%',
+                        width: '12px', height: '100%',
+                        background: 'transparent', pointerEvents: 'all',
                     }} />
-                    <div style={{ padding: '14px 0 18px' }}>
-                        {item.subItems.map((sub, si) => (
-                            <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
-                        ))}
+                )
+            }
+
+            {
+                hasSubItems && (
+                    <div style={{
+                        position: 'absolute',
+                        top: '-3px',
+                        left: '100%',
+                        width: '200px',
+                        background: '#ffffff',
+                        boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+                        pointerEvents: subOpen ? 'all' : 'none',
+                        opacity: subOpen ? 1 : 0,
+                        transform: subOpen ? 'translateX(0)' : 'translateX(-8px)',
+                        transition: 'opacity 0.22s ease, transform 0.22s ease',
+                        overflow: 'hidden',
+                    }}>
+                        <div style={{
+                            height: '3px', background: '#000000',
+                            width: subOpen ? '100%' : '0%',
+                            transition: 'width 0.35s cubic-bezier(0.4,0,0.2,1)',
+                            transitionDelay: '0.05s',
+                        }} />
+                        <div style={{ padding: '14px 0 18px' }}>
+                            {item.subItems.map((sub, si) => (
+                                <SubItem key={sub.href} sub={sub} index={si} visible={subOpen} />
+                            ))}
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }
 
 function SubItem({ sub, index, visible }) {
     const [hovered, setHovered] = useState(false);
-
     return (
         <a
             href={sub.href}
-            onMouseEnter={() => setHovered(true)}
+            onMouseEnter={() => setHovered(true)
+            }
             onMouseLeave={() => setHovered(false)}
             style={{
                 display: 'block',
@@ -694,7 +913,7 @@ function SubItem({ sub, index, visible }) {
             }}
         >
             {sub.label}
-        </a>
+        </a >
     );
 }
 
@@ -748,7 +967,7 @@ function MobileDropdownItem({ item, onNavigate }) {
                         </a>
                     ))}
                 </div>
-            </div>
+            </div >
         );
     }
 

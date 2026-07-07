@@ -96,7 +96,7 @@ export default function BlogView() {
                             >
                                 <img
                                     key={activeIndex}
-                                    src={`${baseUrl}/${images[activeIndex]}`}
+                                    src={images[activeIndex]}
                                     alt={`${blog.title} - image ${activeIndex + 1}`}
                                     style={{
                                         ...styles.mainImage,
@@ -154,7 +154,7 @@ export default function BlogView() {
                                             }}
                                         >
                                             <img
-                                                src={`${baseUrl}/${img}`}
+                                                src={img}
                                                 alt={`Thumbnail ${i + 1}`}
                                                 style={{
                                                     ...styles.thumbImg,

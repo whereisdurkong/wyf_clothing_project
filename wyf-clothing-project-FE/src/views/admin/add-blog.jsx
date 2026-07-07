@@ -153,7 +153,6 @@ const TOOLBAR = [
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function AddBlog({ onSaveDraft, onPublish } = {}) {
     const [title, setTitle] = useState("");
-    const [author, setAuthor] = useState("");
     const [wordCount, setWordCount] = useState(0);
     const [activeFormats, setActive] = useState({});
     const [albumImages, setAlbumImages] = useState([]); // [{ file, src }]
@@ -168,6 +167,8 @@ export default function AddBlog({ onSaveDraft, onPublish } = {}) {
     const savedRange = useRef(null);
 
     const empInfo = JSON.parse(localStorage.getItem('user')) || {};
+
+
     const userInfo = empInfo.user || {};
     const [publishing, setPublishing] = useState(false);
     // ── Toast notification function (copied from AddProduct) ──

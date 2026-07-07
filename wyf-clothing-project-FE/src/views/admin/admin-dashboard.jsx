@@ -248,7 +248,7 @@ export default function AdminDashboard() {
                                 <div className="img-grid" style={styles.grid}>
                                     {keptImages.map((img, i) => (
                                         <div key={i} className="image-card" style={styles.imageCard}>
-                                            <img src={`${baseUrl}/${img.path}`} alt="" style={styles.imageCardImg} />
+                                            <img src={img.path} alt="" style={styles.imageCardImg} />
                                             <button
                                                 className="remove-btn"
                                                 onClick={() => removeKept(img.path)}

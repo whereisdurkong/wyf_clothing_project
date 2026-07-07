@@ -199,7 +199,7 @@ export default function AdminBlogView() {
                 try {
                     const parsed = typeof data.album === "string" ? JSON.parse(data.album) : (data.album || []);
                     setExistingImages(parsed.map(path => ({
-                        url: `${config.baseApi.replace(/\/api$/, "")}/${path}`,
+                        url: `${path}`,
                         filename: path.split("/").pop()
                     })));
                 } catch {
@@ -301,9 +301,9 @@ export default function AdminBlogView() {
     const handleAlbumChange = (e) => { loadFiles(e.target.files); e.target.value = ""; };
     const handleAlbumDrop = (e) => { e.preventDefault(); e.currentTarget.classList.remove("drag-over"); loadFiles(e.dataTransfer.files); };
     const removeNewImage = (idx) => setNewImages(prev => prev.filter((_, i) => i !== idx));
-    const removeExistingImage = (filename) => setRemovedExisting(prev => [...prev, filename]);
+    const removeExistingImage = (url) => setRemovedExisting(prev => [...prev, url]);
 
-    const visibleExisting = existingImages.filter(img => !removedExisting.includes(img.filename));
+    const visibleExisting = existingImages.filter(img => !removedExisting.includes(img.url));
     const totalImages = visibleExisting.length + newImages.length;
     const hasAlbumImages = totalImages > 0;
 
@@ -331,7 +331,8 @@ export default function AdminBlogView() {
             setTimeout(() => setSubmitted(false), 2000);
 
             const merged = newImages.map(({ src, file }) => ({ url: src, filename: file.name }));
-            setExistingImages(prev => [...prev.filter(img => !removedExisting.includes(img.filename)), ...merged]);
+            setExistingImages(prev => [...prev.filter(img => !removedExisting.includes(img.url)), ...merged]);
+
             setNewImages([]);
             setRemovedExisting([]);
         } catch (err) {
@@ -447,7 +448,7 @@ export default function AdminBlogView() {
                                 {visibleExisting.map((img, idx) => (
                                     <div key={`existing-${idx}`} className="ab-album-thumb ab-album-thumb-existing">
                                         <img src={img.url} alt={`Saved image ${idx + 1}`} />
-                                        <button type="button" className="ab-album-thumb-remove" aria-label={`Remove saved image ${idx + 1}`} onClick={(e) => { e.stopPropagation(); removeExistingImage(img.filename); }}>✕</button>
+                                        <button type="button" className="ab-album-thumb-remove" aria-label={`Remove saved image ${idx + 1}`} onClick={(e) => { e.stopPropagation(); removeExistingImage(img.url); }}>✕</button>
                                     </div>
                                 ))}
                                 {newImages.map((img, idx) => (

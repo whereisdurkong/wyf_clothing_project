@@ -11,6 +11,7 @@ export default function AdminCollection() {
             try {
                 const res = await axios.get(`${config.baseApi}/product/get-all-collection`);
                 setCollections(res.data || []);
+                console.log(res.data)
             } catch (err) {
                 console.log("Unable to fetch data: ", err);
             }
@@ -18,19 +19,17 @@ export default function AdminCollection() {
         fetch();
     }, []);
 
-    const baseUrl = config.baseApi.replace("/api", "");
-
     return (
         <div style={styles.grid}>
             {collections.map((col) => (
                 <div key={col.collection_id} style={styles.card} onClick={() => navigate('/admin/admin-collection-view?id=' + col.collection_id)}>
                     <img
-                        src={`${baseUrl}${col.collection_images}`}
+                        src={col.collection_images}
                         alt={col.collection_title}
                         style={styles.image}
                     />
                     <span style={styles.year}>
-                        {new Date(col.created_at).getFullYear()}
+                        {col.collection_title} - {col.is_active === '1' ? 'Active' : 'Inactive'}
                     </span>
                 </div>
             ))}

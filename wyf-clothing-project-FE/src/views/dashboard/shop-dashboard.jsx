@@ -39,6 +39,15 @@ export default function ShopDashboard() {
 
     const baseUrl = config.baseApi.replace("/api", "");
 
+    const handle = async () => {
+        try {
+            await axios.get(`${config.baseApi}/users/test-email`);
+
+        } catch (err) {
+            console.log('ERRROR EAMIL: ', err)
+        }
+    }
+
     return (
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0 }}>
 
@@ -49,7 +58,7 @@ export default function ShopDashboard() {
                     style={{
                         position: "absolute",
                         top: 0, left: 0, right: 0, bottom: 0,
-                        backgroundImage: `url('${baseUrl}/${imgPath}')`,
+                        backgroundImage: `url('${imgPath}')`,
                         backgroundSize: "cover",
                         backgroundPosition: "center",
                         backgroundRepeat: "no-repeat",
@@ -95,7 +104,8 @@ export default function ShopDashboard() {
                 transform: "translateX(-50%)",
                 zIndex: 2,
             }}>
-                <button className="shop-now-btn" onClick={() => navigate('/all-product')}>
+                {/* <button className="shop-now-btn" onClick={() => navigate('/all-product')}> */}
+                <button className="shop-now-btn" onClick={handle}>
                     <span>Shop Now</span>
                 </button>
             </div>

@@ -7,6 +7,7 @@ var path = require('path');
 var userRoutes = require('./routes/userRoutes');
 var product = require('./routes/product');
 var blog = require('./routes/blog')
+var orderRoutes = require('./routes/order');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,9 +33,11 @@ app.use('/blogAlbum', express.static(path.join(__dirname, 'blogAlbum')));
 app.use('/dashboardImages', express.static(path.join(__dirname, 'dashboardImages')));
 
 
+
 app.use('/api/users', userRoutes);
 app.use('/api/product', product);
 app.use('/api/blog', blog);
+app.use('/api/order', orderRoutes);
 
 
 app.listen(PORT, () => {

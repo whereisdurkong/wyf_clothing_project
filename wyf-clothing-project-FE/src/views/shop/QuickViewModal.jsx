@@ -1,7 +1,11 @@
-import { useState, useEffect, useRef } from "react";
+// import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import config from "../../config";
 import FeatherIcon from "feather-icons-react";
 import { useCartFly } from "../../components/CartFlyContext";
+import { Toast } from "../../components/Notification";
+import { useRef, useState, useEffect } from "react";
 
 function formatPrice(p) {
     if (p === null || p === undefined || p === "") return "";
@@ -19,8 +23,14 @@ function getCheapestVariant(variants) {
 }
 
 const SIZE_LABEL_MAP = {
-    xs: "XS", s: "S", m: "M", l: "L",
-    xl: "XL", xxl: "2XL", xxxl: "3XL", one_size: "One Size",
+    xs: "XS",
+    s: "S",
+    m: "M",
+    l: "L",
+    xl: "XL",
+    xxl: "XXL",
+    xxxl: "XXXL",
+    one_size: "One Size",
 };
 
 function getSizeLabel(sizeKey) {
@@ -48,10 +58,13 @@ const GarmentPlaceholder = () => (
 
 export default function QuickViewModal({ product, variants: allVariants, onClose, onAddToCart }) {
     const productVariants = allVariants[product.product_id] || [];
-    const hasVariants = product.has_variants == "1";
+    const hasVariants = product.has_variants === true || product.has_variants === "true" || product.has_variants === "1";
+
 
     const { flyToCart } = useCartFly();
     const addToCartBtnRef = useRef(null);
+    const navigate = useNavigate();
+    const [buyLoading, setBuyLoading] = useState(false);
 
     const [selectedVariant, setSelectedVariant] = useState(() =>
         hasVariants ? getCheapestVariant(productVariants) : null
@@ -63,6 +76,7 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
     const [addedFeedback, setAddedFeedback] = useState(false);
     const [imgError, setImgError] = useState({});
     const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+    const [notifications, setNotifications] = useState([]);
     const overlayRef = useRef(null);
     const touchStartX = useRef(null);
 
@@ -94,6 +108,14 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
         window.addEventListener("resize", handleResize);
         return () => window.removeEventListener("resize", handleResize);
     }, []);
+
+    const addNotif = (title, message, type) => {
+        const id = Date.now();
+        setNotifications(prev => [...prev, { id, title, message, type }]);
+        setTimeout(() => {
+            setNotifications(prev => prev.filter(n => n.id !== id));
+        }, 4000);
+    };
 
     // Price logic
     let displayPrice = "—";
@@ -150,28 +172,70 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
         setQuantity(prev => Math.max(1, Math.min(stockQty || 99, prev + delta)));
     };
 
+    // ── Add to cart — ported directly from the product page's AddToCart ──────
     const handleAddToCart = () => {
-        let cart = JSON.parse(localStorage.getItem("cart")) || [];
+        // Get existing cart
+        let cart = JSON.parse(localStorage.getItem('cart')) || [];
+
+        // Create cart item with only what you need
         const cartItem = {
             product_id: product.product_id,
-            quantity,
-            variant_size: selectedVariant ? getSizeLabel(selectedVariant.product_variant_size) : null,
+            quantity: quantity,
+            variant_size: selectedVariant ? getSizeLabel(selectedVariant.product_variant_size) : null
         };
-        const existingIndex = cart.findIndex(
-            item => item.product_id === cartItem.product_id && item.variant_size === cartItem.variant_size
+
+        // Check if same product + size already exists
+        const existingIndex = cart.findIndex(item =>
+            item.product_id === cartItem.product_id &&
+            item.variant_size === cartItem.variant_size
         );
-        if (existingIndex !== -1) cart[existingIndex].quantity += quantity;
-        else cart.push(cartItem);
-        localStorage.setItem("cart", JSON.stringify(cart));
+
+        if (existingIndex !== -1) {
+            cart[existingIndex].quantity += quantity;
+        } else {
+            cart.push(cartItem);
+        }
+
+        localStorage.setItem('cart', JSON.stringify(cart));
+
+        addNotif("Added to cart", `${quantity} item(s) added to your cart.`, "success");
+
         if (onAddToCart) onAddToCart(cartItem);
+
         setAddedFeedback(true);
         setTimeout(() => setAddedFeedback(false), 2000);
 
-        // 🚀 fly to cart
         flyToCart(
-            activeImage ? `${config.baseApi.replace("/api", "")}${activeImage}` : null,
+            activeImage,
             addToCartBtnRef.current
         );
+    };
+
+    const handleBuyNow = async () => {
+        const token = localStorage.getItem("access_token");
+
+        if (!token) {
+            navigate("/auth/login");
+            return;
+        }
+
+        try {
+            setBuyLoading(true);
+            await axios.get(`${config.baseApi}/users/me`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // token is valid — proceed to buy page
+            navigate(
+                `/cart-checkout?product_id=${product.product_id}&quantity=${quantity}${selectedVariant ? `&variant_id=${selectedVariant.product_variant_id}` : ""
+                }`
+            );
+        } catch (err) {
+            localStorage.removeItem("access_token");
+            navigate("/auth/login");
+        } finally {
+            setBuyLoading(false);
+        }
     };
 
     const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
@@ -511,6 +575,17 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
                 }
             `}</style>
 
+            {/* Toast container — ported from the product page */}
+            <div style={{ position: "fixed", bottom: 20, right: 24, zIndex: 9999, width: 340, pointerEvents: "none" }}>
+                {notifications.map(n => (
+                    <div key={n.id} style={{ pointerEvents: "auto" }}>
+                        <Toast {...n} onDismiss={id =>
+                            setNotifications(prev => prev.filter(n => n.id !== id))
+                        } />
+                    </div>
+                ))}
+            </div>
+
             <div
                 ref={overlayRef}
                 className="qv-overlay"
@@ -535,7 +610,7 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
                             {activeImage && !imgError[activeIndex] ? (
                                 <img
                                     key={animKey}
-                                    src={`${imgBase}${activeImage}`}
+                                    src={activeImage}
                                     alt={product.product_name}
                                     className={`qv-main-img ${animDir || ""}`}
                                     onAnimationEnd={() => setAnimDir(null)}
@@ -580,7 +655,7 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
                                         onClick={() => handleThumb(i, i > activeIndex ? "right" : "left")}
                                         aria-label={`View ${img.label}`}
                                     >
-                                        <img src={`${imgBase}${img.src}`} alt={img.label} />
+                                        <img src={img.src} alt={img.label} />
                                     </button>
                                 ))}
                             </div>
@@ -720,8 +795,8 @@ export default function QuickViewModal({ product, variants: allVariants, onClose
                                         ) : "Add to cart"}
                                     </span>
                                 </button>
-                                <button className="qv-btn-buy" disabled={isSoldOut}>
-                                    <span>Buy it now</span>
+                                <button className="qv-btn-buy" disabled={isSoldOut || buyLoading} onClick={handleBuyNow}>
+                                    <span>{buyLoading ? "Please wait..." : "Buy it now"}</span>
                                 </button>
                             </div>
 

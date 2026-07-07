@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 var Sequelize = require('sequelize');
+const supabase = require('../supabase');
 const { DataTypes } = Sequelize;
 
 // Ensure products directory exists (not uploads)
@@ -290,6 +291,22 @@ const VariantMaster = db.define('product_variant_master', {
     tableName: 'product_variant_master'
 })
 
+router.get('/test-sb', async (req, res, next) => {
+    try {
+        const { data, error } = await supabase.from('users_master').select('*');
+
+        if (error) {
+            console.error('Supabase error:', error);
+            return res.status(500).json({ error: error.message });
+        }
+
+        res.json(data);
+    } catch (err) {
+        console.error('Route error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // PRODUCTS
 router.post('/add-product', upload.fields([
@@ -311,103 +328,128 @@ router.post('/add-product', upload.fields([
         variants,
     } = req.body;
 
-    // Parse variants if it's a string
     let parsedVariants = variants;
     if (typeof variants === 'string') {
         try {
             parsedVariants = JSON.parse(variants);
         } catch (e) {
-            console.error('Error parsing variants:', e);
             return res.status(400).json({ message: 'Invalid variants format' });
         }
     }
 
-    // Normalize has_variants to a real boolean
     const isVariant = has_variants === true || has_variants === "true" || has_variants === 1 || has_variants === "1";
 
-    // Basic validation
     if (!product_name || !product_category) {
         return res.status(400).json({ message: 'product_name and product_category are required.' });
     }
-
     if (isVariant && (!parsedVariants || parsedVariants.length === 0)) {
         return res.status(400).json({ message: 'At least one variant is required when has_variants is true.' });
     }
-
     if (!isVariant && (quantity === undefined || quantity === null || quantity === "")) {
         return res.status(400).json({ message: 'quantity is required when has_variants is false.' });
     }
 
-    const now = new Date();
+    const now = new Date().toISOString();
+
+    // Helper: upload one file buffer to Supabase Storage and return its public URL
+    async function uploadToStorage(fileBuffer, mimeType, filename) {
+        const { error: uploadError } = await supabase.storage
+            .from('products')
+            .upload(filename, fileBuffer, { contentType: mimeType, upsert: true });
+
+        if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+
+        const { data: urlData } = supabase.storage.from('products').getPublicUrl(filename);
+        return urlData.publicUrl;
+    }
+
+    // Cleanup temp files on error
+    function cleanupFiles() {
+        if (req.files) {
+            Object.values(req.files).flat().forEach(file => {
+                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
+            });
+        }
+    }
 
     try {
-        // First, insert product to get the product_id (without price fields)
-        const [product] = await knex('product_master').insert({
-            product_name,
-            product_description,
-            product_category,
-            product_collection: product_collection || null,
-            has_variants: isVariant,
-            product_quantity: isVariant ? null : quantity,
-            created_at: now,
-            created_by,
-            is_active: '1'
-        }).returning('product_id');
+        // 1. Insert product row to get product_id
+        const { data: product, error: insertError } = await supabase
+            .from('product_master')
+            .insert({
+                product_name,
+                product_description: product_description || null,
+                product_category,
+                product_collection: product_collection || null,
+                has_variants: isVariant,
+                product_quantity: isVariant ? null : quantity,
+                created_at: now,
+                created_by: created_by || null,
+                is_active: '1',
+            })
+            .select('product_id')
+            .single();
+
+        if (insertError) {
+            cleanupFiles();
+            return res.status(500).json({ message: 'Failed to insert product.', error: insertError.message });
+        }
 
         const productId = product.product_id;
+        const safeName = sanitizeFileName(product_name);
 
-        // Process and save image paths
+        // 2. Upload images to Supabase Storage
         let productImageFront = null;
         let productImageBack = null;
         let productImagesJson = null;
 
-        // Handle front image
-        if (req.files['product_image_front'] && req.files['product_image_front'][0]) {
+        if (req.files['product_image_front']?.[0]) {
             const file = req.files['product_image_front'][0];
-            const ext = path.extname(file.filename);
-            const newFilename = `product_image_front_${productId}_${sanitizeFileName(product_name)}${ext}`;
-            const newPath = path.join(productsDir, newFilename);
-
-            fs.renameSync(file.path, newPath);
-            productImageFront = `/products/${newFilename}`;
+            const ext = path.extname(file.originalname);
+            const filename = `product_image_front_${productId}_${safeName}${ext}`;
+            const buffer = fs.readFileSync(file.path);
+            productImageFront = await uploadToStorage(buffer, file.mimetype, filename);
+            fs.unlinkSync(file.path);
         }
 
-        // Handle back image
-        if (req.files['product_image_back'] && req.files['product_image_back'][0]) {
+        if (req.files['product_image_back']?.[0]) {
             const file = req.files['product_image_back'][0];
-            const ext = path.extname(file.filename);
-            const newFilename = `product_image_back_${productId}_${sanitizeFileName(product_name)}${ext}`;
-            const newPath = path.join(productsDir, newFilename);
-
-            fs.renameSync(file.path, newPath);
-            productImageBack = `/products/${newFilename}`;
+            const ext = path.extname(file.originalname);
+            const filename = `product_image_back_${productId}_${safeName}${ext}`;
+            const buffer = fs.readFileSync(file.path);
+            productImageBack = await uploadToStorage(buffer, file.mimetype, filename);
+            fs.unlinkSync(file.path);
         }
 
-        // Handle multiple additional images
-        if (req.files['product_images'] && req.files['product_images'].length > 0) {
+        if (req.files['product_images']?.length > 0) {
             const additionalImages = [];
             for (let i = 0; i < req.files['product_images'].length; i++) {
                 const file = req.files['product_images'][i];
-                const ext = path.extname(file.filename);
-                const newFilename = `product_image_extra_${productId}_${i}_${sanitizeFileName(product_name)}${ext}`;
-                const newPath = path.join(productsDir, newFilename);
-
-                fs.renameSync(file.path, newPath);
-                additionalImages.push(`/products/${newFilename}`);
+                const ext = path.extname(file.originalname);
+                const filename = `product_image_extra_${productId}_${i}_${safeName}${ext}`;
+                const buffer = fs.readFileSync(file.path);
+                const url = await uploadToStorage(buffer, file.mimetype, filename);
+                additionalImages.push(url);
+                fs.unlinkSync(file.path);
             }
             productImagesJson = JSON.stringify(additionalImages);
         }
 
-        // Update product with image paths
-        await knex('product_master')
-            .where({ product_id: productId })
+        // 3. Update product row with image URLs
+        const { error: updateError } = await supabase
+            .from('product_master')
             .update({
                 product_image_front: productImageFront,
                 product_image_back: productImageBack,
-                product_images: productImagesJson
-            });
+                product_images: productImagesJson,
+            })
+            .eq('product_id', productId);
 
-        // If has variants, insert each row into product_variant_master
+        if (updateError) {
+            return res.status(500).json({ message: 'Failed to save image URLs.', error: updateError.message });
+        }
+
+        // 4. Insert variants
         if (isVariant && parsedVariants.length > 0) {
             const variantRows = parsedVariants.map(v => ({
                 product_id: productId,
@@ -416,79 +458,129 @@ router.post('/add-product', upload.fields([
                 product_variant_price: parseFloat(v.product_variant_price || v.price) || 0,
                 product_variant_sale_price: parseFloat(v.product_variant_sale_price || v.sale_price) || 0,
                 created_at: now,
-                created_by: created_by,
+                created_by: created_by || null,
             }));
 
-            await knex('product_variant_master').insert(variantRows);
+            const { error: variantError } = await supabase
+                .from('product_variant_master')
+                .insert(variantRows);
+
+            if (variantError) {
+                return res.status(500).json({ message: 'Failed to insert variants.', error: variantError.message });
+            }
         }
 
         return res.status(201).json({
             message: 'Product saved successfully.',
-            product_id: productId
+            product_id: productId,
         });
 
     } catch (err) {
         console.error('Error saving product:', err);
-        // Clean up uploaded files if there's an error
-        if (req.files) {
-            Object.values(req.files).flat().forEach(file => {
-                if (file.path && fs.existsSync(file.path)) {
-                    fs.unlinkSync(file.path);
-                }
-            });
-        }
+        cleanupFiles();
         return res.status(500).json({ message: 'Internal server error.', error: err.message });
     }
 });
-
 router.get('/get-all-products', async (req, res, next) => {
     try {
-        const getAllProducts = await knex('product_master').select('*');
-        res.json(getAllProducts)
+        const { data, error } = await supabase
+            .from('product_master')
+            .select('*');
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
     } catch (err) {
-        console.log('Unable to fetch all products: ', err)
+        console.error('Unable to fetch all products:', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 router.get('/get-all-product-variant', async (req, res, next) => {
     try {
-        const getAllProductsVar = await knex('product_variant_master').select('*');
-        res.json(getAllProductsVar)
+        const { data, error } = await supabase
+            .from('product_variant_master')
+            .select('*');
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
     } catch (err) {
-        console.log('Unable to fetch all product: ', err)
+        console.error('Unable to fetch all product variants:', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
-})
+});
 
 router.get('/get-variant-by-id-variant', async (req, res, next) => {
     try {
-        const getData = await VariantMaster.findAll({
-            where: {
-                product_id: req.query.id,
-                product_variant_size: req.query.variantSize
-            }
-        });
-        res.json(getData[0]); // ← was missing the response
+        const { data, error } = await supabase
+            .from('product_variant_master')
+            .select('*')
+            .eq('product_id', req.query.id)
+            .ilike('product_variant_size', req.query.variantSize)
+            .single();
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
     } catch (err) {
-        console.log('Internal Error', err);
+        console.error('Internal Error', err);
         res.status(500).json({ message: 'Internal server error' });
     }
 });
 
 router.get('/get-product-by-id', async (req, res, next) => {
     try {
-        console.log('+++++++++++++++++++===', req.query.id)
-        const getById = await ProductMaster.findAll({
-            where: {
-                product_id: req.query.id
-            }
-        })
-        console.log(getById)
-        console.log('triggered /product-by-id')
-        res.json(getById[0])
+        const { data: product, error: productError } = await supabase
+            .from('product_master')
+            .select('*')
+            .eq('product_id', req.query.id)
+            .single();
+
+        if (productError) {
+            console.error('Supabase error:', productError);
+            return res.status(500).json({ error: productError.message });
+        }
+        if (!product) return res.status(404).json({ message: 'Product not found.' });
+
+        const { data: variants, error: variantError } = await supabase
+            .from('product_variant_master')
+            .select('*')
+            .eq('product_id', req.query.id);
+
+        if (variantError) {
+            console.error('Supabase variant error:', variantError);
+            return res.status(500).json({ error: variantError.message });
+        }
+
+        // Attach variants to the product object so the frontend shape stays the same
+        product.product_variant_master = variants || [];
+
+        res.json(product);
     } catch (err) {
-        console.log('Internal Error')
+        console.error('Unable to fetch product by id:', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
-})
+});
+
+router.get('/get-variant-by-id', async (req, res, next) => {
+    try {
+        const { data: variant, error } = await supabase
+            .from('product_variant_master')
+            .select('*')
+            .eq('product_variant_id', req.query.id)
+            .single();
+
+        if (error) {
+            console.error('Supabase error:', error);
+            return res.status(500).json({ error: error.message });
+        }
+        if (!variant) return res.status(404).json({ message: 'Variant not found.' });
+
+        res.json(variant);
+    } catch (err) {
+        console.error('Unable to fetch variant by id:', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 
 router.post('/update-product', upload.fields([
     { name: 'product_image_front', maxCount: 1 },
@@ -505,7 +597,7 @@ router.post('/update-product', upload.fields([
             product_description,
             product_category,
             product_collection,
-            is_active,          // ← destructured correctly
+            is_active,
             has_variants,
             variants,
             existing_extra_images,
@@ -513,132 +605,128 @@ router.post('/update-product', upload.fields([
             clear_image_back,
         } = req.body;
 
-        // ── Validation ───────────────────────────────────────────────
-        if (!product_id) {
-            return res.status(400).json({ message: 'product_id is required.' });
-        }
-        if (!product_name || !product_category) {
-            return res.status(400).json({ message: 'product_name and product_category are required.' });
-        }
+        if (!product_id) return res.status(400).json({ message: 'product_id is required.' });
+        if (!product_name || !product_category) return res.status(400).json({ message: 'product_name and product_category are required.' });
 
-        // ── Parse variants ───────────────────────────────────────────
         let parsedVariants = [];
         if (variants) {
-            try {
-                parsedVariants = typeof variants === 'string' ? JSON.parse(variants) : variants;
-            } catch (e) {
-                return res.status(400).json({ message: 'Invalid variants format.' });
-            }
+            try { parsedVariants = typeof variants === 'string' ? JSON.parse(variants) : variants; }
+            catch (e) { return res.status(400).json({ message: 'Invalid variants format.' }); }
         }
 
-        // ── Parse kept extra images ──────────────────────────────────
         let keptExtras = [];
         if (existing_extra_images) {
-            try {
-                keptExtras = typeof existing_extra_images === 'string'
-                    ? JSON.parse(existing_extra_images)
-                    : existing_extra_images;
-            } catch (e) {
-                keptExtras = [];
-            }
+            try { keptExtras = typeof existing_extra_images === 'string' ? JSON.parse(existing_extra_images) : existing_extra_images; }
+            catch { keptExtras = []; }
         }
 
-        const now = new Date();
+        const now = new Date().toISOString();
+        const safeName = sanitizeFileName(product_name);
 
-        // ── Fetch current product ────────────────────────────────────
-        const current = await knex('product_master')
-            .where({ product_id })
-            .first();
-
-        if (!current) {
-            return res.status(404).json({ message: 'Product not found.' });
+        // Helper: upload buffer to Supabase Storage, return public URL
+        async function uploadToStorage(buffer, mimeType, filename) {
+            const { error: uploadError } = await supabase.storage
+                .from('products')
+                .upload(filename, buffer, { contentType: mimeType, upsert: true });
+            if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+            const { data: urlData } = supabase.storage.from('products').getPublicUrl(filename);
+            return urlData.publicUrl;
         }
 
-        // ── Handle front image ───────────────────────────────────────────
+        // Helper: delete a file from Supabase Storage by its public URL
+        async function deleteFromStorage(publicUrl) {
+            if (!publicUrl) return;
+            // Extract just the filename from the full URL
+            const filename = publicUrl.split('/').pop();
+            await supabase.storage.from('products').remove([filename]);
+        }
+
+        // Fetch current product
+        const { data: current, error: fetchError } = await supabase
+            .from('product_master')
+            .select('*')
+            .eq('product_id', product_id)
+            .single();
+
+        if (fetchError || !current) return res.status(404).json({ message: 'Product not found.' });
+
+        // ── Front image ──────────────────────────────────────────────
         let productImageFront = current.product_image_front;
 
         if (req.files?.['product_image_front']?.[0]) {
-            // Delete old file from disk
-            if (current.product_image_front) {
-                const oldPath = path.join(__dirname, '..', current.product_image_front);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            }
+            await deleteFromStorage(current.product_image_front);
             const file = req.files['product_image_front'][0];
-            const ext = path.extname(file.originalname);   // ← fix: use originalname
-            const newFilename = `product_image_front_${product_id}_${sanitizeFileName(product_name)}${ext}`;
-            const newPath = path.join(productsDir, newFilename);
-            fs.renameSync(file.path, newPath);
-            productImageFront = `/products/${newFilename}`;
+            const ext = path.extname(file.originalname);
+            const filename = `product_image_front_${product_id}_${safeName}${ext}`;
+            const buffer = fs.readFileSync(file.path);
+            productImageFront = await uploadToStorage(buffer, file.mimetype, filename);
+            fs.unlinkSync(file.path);
         } else if (clear_image_front === 'true') {
-            if (current.product_image_front) {
-                const oldPath = path.join(__dirname, '..', current.product_image_front);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            }
+            await deleteFromStorage(current.product_image_front);
             productImageFront = null;
         }
 
-        // ── Handle back image ────────────────────────────────────────────
+        // ── Back image ───────────────────────────────────────────────
         let productImageBack = current.product_image_back;
 
         if (req.files?.['product_image_back']?.[0]) {
-            // Delete old file from disk
-            if (current.product_image_back) {
-                const oldPath = path.join(__dirname, '..', current.product_image_back);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            }
+            await deleteFromStorage(current.product_image_back);
             const file = req.files['product_image_back'][0];
-            const ext = path.extname(file.originalname);   // ← fix: use originalname
-            const newFilename = `product_image_back_${product_id}_${sanitizeFileName(product_name)}${ext}`;
-            const newPath = path.join(productsDir, newFilename);
-            fs.renameSync(file.path, newPath);
-            productImageBack = `/products/${newFilename}`;
+            const ext = path.extname(file.originalname);
+            const filename = `product_image_back_${product_id}_${safeName}${ext}`;
+            const buffer = fs.readFileSync(file.path);
+            productImageBack = await uploadToStorage(buffer, file.mimetype, filename);
+            fs.unlinkSync(file.path);
         } else if (clear_image_back === 'true') {
-            if (current.product_image_back) {
-                const oldPath = path.join(__dirname, '..', current.product_image_back);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-            }
+            await deleteFromStorage(current.product_image_back);
             productImageBack = null;
         }
 
-        // ── Handle extra images ──────────────────────────────────────
+        // ── Extra images ─────────────────────────────────────────────
         let oldExtras = [];
         try { oldExtras = JSON.parse(current.product_images || '[]'); } catch { oldExtras = []; }
 
+        // Delete extras that were removed by the user
         const removedExtras = oldExtras.filter(src => !keptExtras.includes(src));
-        removedExtras.forEach(src => {
-            const oldPath = path.join(__dirname, '..', src);
-            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-        });
+        for (const src of removedExtras) {
+            await deleteFromStorage(src);
+        }
 
+        // Upload new extras
         const newExtraPaths = [];
         if (req.files?.['product_images']?.length > 0) {
-            req.files['product_images'].forEach((file, i) => {
-                const ext = path.extname(file.filename);
-                const newFilename = `product_image_extra_${product_id}_${Date.now()}_${i}_${sanitizeFileName(product_name)}${ext}`;
-                const newPath = path.join(productsDir, newFilename);
-                fs.renameSync(file.path, newPath);
-                newExtraPaths.push(`/products/${newFilename}`);
-            });
+            for (let i = 0; i < req.files['product_images'].length; i++) {
+                const file = req.files['product_images'][i];
+                const ext = path.extname(file.originalname);
+                const filename = `product_image_extra_${product_id}_${Date.now()}_${i}_${safeName}${ext}`;
+                const buffer = fs.readFileSync(file.path);
+                const url = await uploadToStorage(buffer, file.mimetype, filename);
+                newExtraPaths.push(url);
+                fs.unlinkSync(file.path);
+            }
         }
 
         const allExtras = [...keptExtras, ...newExtraPaths];
         const productImagesJson = allExtras.length > 0 ? JSON.stringify(allExtras) : null;
 
         // ── Update product_master ────────────────────────────────────
-        await knex('product_master')
-            .where({ product_id })
+        const { error: updateError } = await supabase
+            .from('product_master')
             .update({
                 product_name,
                 product_description: product_description || null,
                 product_category,
                 product_collection: product_collection || null,
-                is_active: is_active === '1' || is_active === 1 ? 1 : 0,  // ← fixed: was referencing undefined `status`
+                is_active: is_active === '1' || is_active === 1 ? 1 : 0,
                 has_variants: has_variants === 'true' || has_variants === true,
                 product_image_front: productImageFront,
                 product_image_back: productImageBack,
                 product_images: productImagesJson,
                 updated_at: now,
-            });
+            })
+            .eq('product_id', product_id);
+
+        if (updateError) return res.status(500).json({ message: 'Failed to update product.', error: updateError.message });
 
         // ── Upsert variants ──────────────────────────────────────────
         if (parsedVariants.length > 0) {
@@ -646,10 +734,19 @@ router.post('/update-product', upload.fields([
                 .filter(v => v.product_variant_id)
                 .map(v => v.product_variant_id);
 
-            await knex('product_variant_master')
-                .where({ product_id })
-                .whereNotIn('product_variant_id', incomingIds.length > 0 ? incomingIds : [0])
-                .delete();
+            // Delete variants not in the incoming list
+            if (incomingIds.length > 0) {
+                await supabase
+                    .from('product_variant_master')
+                    .delete()
+                    .eq('product_id', product_id)
+                    .not('product_variant_id', 'in', `(${incomingIds.join(',')})`);
+            } else {
+                await supabase
+                    .from('product_variant_master')
+                    .delete()
+                    .eq('product_id', product_id);
+            }
 
             for (const v of parsedVariants) {
                 const variantData = {
@@ -657,43 +754,36 @@ router.post('/update-product', upload.fields([
                     product_variant_size: v.product_variant_size,
                     product_variant_quantity: parseInt(v.product_variant_quantity) || 0,
                     product_variant_price: parseFloat(v.product_variant_price) || 0,
-
                     product_variant_sale_price: v.product_variant_sale_price
-                        ? parseFloat(v.product_variant_sale_price) || 0
-                        : 0,
+                        ? parseFloat(v.product_variant_sale_price) || 0 : 0,
                 };
 
                 if (v.product_variant_id) {
-                    await knex('product_variant_master')
-                        .where({ product_variant_id: v.product_variant_id })
-                        .update(variantData);
+                    await supabase
+                        .from('product_variant_master')
+                        .update(variantData)
+                        .eq('product_variant_id', v.product_variant_id);
                 } else {
-                    await knex('product_variant_master').insert({
-                        ...variantData,
-                        created_at: now,
-                    });
+                    await supabase
+                        .from('product_variant_master')
+                        .insert({ ...variantData, created_at: now });
                 }
             }
         }
 
-        return res.status(200).json({
-            message: 'Product updated successfully.',
-            product_id,
-        });
+        return res.status(200).json({ message: 'Product updated successfully.', product_id });
 
     } catch (err) {
-        console.log('INTERNAL ERROR: ', err);
+        console.error('INTERNAL ERROR:', err);
         if (req.files) {
             Object.values(req.files).flat().forEach(file => {
-                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);  // ← fix: was `oldPath`
+                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
             });
         }
         return res.status(500).json({ message: 'Internal server error.', error: err.message });
     }
 });
 
-
-// COLLECTION
 router.post('/add-collection', uploadCollection.single('collection_image'), async (req, res, next) => {
     try {
         const { collection_title, collection_subtitle } = req.body;
@@ -701,32 +791,71 @@ router.post('/add-collection', uploadCollection.single('collection_image'), asyn
         if (!collection_title) {
             return res.status(400).json({ message: 'collection_title is required.' });
         }
-
         if (!req.file) {
             return res.status(400).json({ message: 'An image is required.' });
         }
 
-        const now = new Date();
+        // 1. Insert to get collection_id
+        const { data: collection, error: insertError } = await supabase
+            .from('product_collection_master')
+            .insert({
+                collection_title,
+                collection_subtitle: collection_subtitle || null,
+                created_at: new Date(),
+                is_active: '1'
+            })
+            .select('collection_id')
+            .single();
 
-        const [collection] = await knex('product_collection_master').insert({
-            collection_title,
-            collection_subtitle: collection_subtitle || null,
-            created_at: now,
-            is_active: '1'
-        }).returning('collection_id');
+        if (insertError) {
+            console.error('Supabase insert error:', insertError);
+            if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            return res.status(500).json({ message: 'Failed to create collection.', error: insertError.message });
+        }
 
         const collectionId = collection.collection_id;
 
-        const ext = path.extname(req.file.filename);
-        const newFilename = `collection_image_${collectionId}${ext}`;
-        const newPath = path.join(collectionImagesDir, newFilename);
+        // 2. Upload image to Supabase Storage
+        const ext = path.extname(req.file.originalname);
+        const filename = `collection_image_${collectionId}${ext}`;
+        const fileBuffer = fs.readFileSync(req.file.path);
 
-        fs.renameSync(req.file.path, newPath);
-        const imagePath = `/collectionImages/${newFilename}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('collection-images')
+            .upload(filename, fileBuffer, {
+                contentType: req.file.mimetype,
+                upsert: true
+            });
 
-        await knex('product_collection_master')
-            .where({ collection_id: collectionId })
-            .update({ collection_images: imagePath });  // single string, not JSON array
+        console.log('Upload result:', uploadData);
+        console.log('Upload error:', uploadError);
+
+        if (uploadError) {
+            console.error('Supabase storage upload error:', uploadError);
+            if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            return res.status(500).json({ message: 'Failed to upload image.', error: uploadError.message });
+        }
+
+        // 3. Get public URL
+        const { data: urlData } = supabase.storage
+            .from('collection-images')
+            .getPublicUrl(filename);
+
+        const imagePath = urlData.publicUrl;
+
+        // 4. Delete local temp file
+        if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+
+        // 5. Update record with image URL
+        const { error: updateError } = await supabase
+            .from('product_collection_master')
+            .update({ collection_images: imagePath })
+            .eq('collection_id', collectionId);
+
+        if (updateError) {
+            console.error('Supabase update error:', updateError);
+            return res.status(500).json({ message: 'Failed to save image path.', error: updateError.message });
+        }
 
         return res.status(201).json({
             message: 'Collection added successfully.',
@@ -735,7 +864,7 @@ router.post('/add-collection', uploadCollection.single('collection_image'), asyn
         });
 
     } catch (err) {
-        console.error('Unable to add new collection', err);
+        console.error('Unable to add new collection:', err);
         if (req.file?.path && fs.existsSync(req.file.path)) {
             fs.unlinkSync(req.file.path);
         }
@@ -745,78 +874,107 @@ router.post('/add-collection', uploadCollection.single('collection_image'), asyn
 
 router.get('/get-all-collection', async (req, res, next) => {
     try {
-        const getAllCollection = await knex('product_collection_master').select('*');
-        res.json(getAllCollection)
+        const { data, error } = await supabase
+            .from('product_collection_master')
+            .select('*');
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
     } catch (err) {
-        console.log('Unable to fetch all collections: ', err)
+        console.log('Unable to fetch all collections: ', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
-})
+});
+
 router.get('/get-collection-by-id', async (req, res, next) => {
-    const getbyId = await CollectionMaster.findAll({
-        where: {
-            collection_id: req.query.id
-        }
-    })
-    console.log(getbyId)
-    console.log('triggered /collection-by-id')
-    res.json(getbyId[0])
-})
+    try {
+        const { data, error } = await supabase
+            .from('product_collection_master')
+            .select('*')
+            .eq('collection_id', req.query.id)
+            .single();
+
+        if (error) return res.status(500).json({ error: error.message });
+        if (!data) return res.status(404).json({ message: 'Collection not found.' });
+
+        res.json(data);
+    } catch (err) {
+        console.log('Unable to fetch collection by id: ', err);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+});
+
 router.post('/update-collection', uploadCollection.single('collection_images'), async (req, res, next) => {
     try {
         const { collection_id, collection_title, collection_subtitle, is_active } = req.body;
 
-        if (!collection_id) {
-            return res.status(400).json({ message: 'collection_id is required.' });
-        }
-        if (!collection_title) {
-            return res.status(400).json({ message: 'collection_title is required.' });
-        }
+        if (!collection_id) return res.status(400).json({ message: 'collection_id is required.' });
+        if (!collection_title) return res.status(400).json({ message: 'collection_title is required.' });
 
-        // 1. Fetch current record to get existing image path
-        const current = await knex('product_collection_master')
-            .where({ collection_id })
-            .first();
+        // 1. Fetch current record
+        const { data: current, error: fetchError } = await supabase
+            .from('product_collection_master')
+            .select('*')
+            .eq('collection_id', collection_id)
+            .single();
 
-        if (!current) {
-            // Clean up uploaded temp file if record doesn't exist
-            if (req.file?.path && fs.existsSync(req.file.path)) {
-                fs.unlinkSync(req.file.path);
-            }
+        if (fetchError || !current) {
             return res.status(404).json({ message: 'Collection not found.' });
         }
 
         let imagePath = current.collection_images; // default: keep existing
 
         if (req.file) {
-            // 2. Delete the old image from disk first
+            // 2. Delete old image from Supabase Storage (if it exists)
             if (current.collection_images) {
-                const oldPath = path.join(__dirname, '..', current.collection_images);
-                if (fs.existsSync(oldPath)) {
-                    fs.unlinkSync(oldPath);
-                    console.log(`Deleted old collection image: ${oldPath}`);
-                }
+                // Extract just the filename from the full Supabase URL
+                const oldFilename = current.collection_images.split('/').pop();
+                await supabase.storage
+                    .from('collection-images')
+                    .remove([oldFilename]);
             }
 
-            // 3. Rename temp upload to a clean, deterministic filename
-            const ext = path.extname(req.file.originalname); // use originalname for correct ext
+            // 3. Upload new image to Supabase Storage
+            const ext = path.extname(req.file.originalname);
             const newFilename = `collection_image_${collection_id}${ext}`;
-            const newPath = path.join(collectionImagesDir, newFilename);
-            fs.renameSync(req.file.path, newPath);
-            imagePath = `/collectionImages/${newFilename}`;
 
-            console.log(`Saved new collection image: ${newPath}`);
+            const fileBuffer = fs.readFileSync(req.file.path);
+
+            const { error: uploadError } = await supabase.storage
+                .from('collection-images')
+                .upload(newFilename, fileBuffer, {
+                    contentType: req.file.mimetype,
+                    upsert: true,
+                });
+
+            if (fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+            if (uploadError) {
+                return res.status(500).json({ message: 'Image upload failed.', error: uploadError.message });
+            }
+
+            // 4. Get the public URL
+            const { data: urlData } = supabase.storage
+                .from('collection-images')
+                .getPublicUrl(newFilename);
+
+            imagePath = urlData.publicUrl;
         }
 
-        // 4. Update the DB record
-        await knex('product_collection_master')
-            .where({ collection_id })
+        // 5. Update the DB record
+        const { error: updateError } = await supabase
+            .from('product_collection_master')
             .update({
                 collection_title,
                 collection_subtitle: collection_subtitle || null,
                 collection_images: imagePath,
                 is_active: is_active == 1 ? '1' : '0',
                 updated_at: new Date(),
-            });
+            })
+            .eq('collection_id', collection_id);
+
+        if (updateError) {
+            return res.status(500).json({ message: 'Failed to update collection.', error: updateError.message });
+        }
 
         return res.status(200).json({
             message: 'Collection updated successfully.',
@@ -826,14 +984,9 @@ router.post('/update-collection', uploadCollection.single('collection_images'), 
 
     } catch (err) {
         console.error('Unable to update collection:', err);
-        // Clean up temp file on error
-        if (req.file?.path && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
         return res.status(500).json({ message: 'Internal server error.', error: err.message });
     }
 });
-
 
 //SETUP
 router.post('/add-setup', uploadSetup.fields([
@@ -844,134 +997,185 @@ router.post('/add-setup', uploadSetup.fields([
 ]), async (req, res, next) => {
     try {
         const categories = ['shirt', 'hoodie', 'bottoms', 'footwear'];
-        const savedPaths = {};
+        const savedUrls = {};
 
-        // First, process all uploaded files and save them with proper names
+        // Helper: upload buffer to Supabase Storage, return public URL
+        async function uploadToStorage(buffer, mimeType, filename) {
+            const { error: uploadError } = await supabase.storage
+                .from('setup-images')          // ← your bucket name
+                .upload(filename, buffer, { contentType: mimeType, upsert: true });
+            if (uploadError) throw new Error(`Storage upload failed: ${uploadError.message}`);
+            const { data: urlData } = supabase.storage
+                .from('setup-images')
+                .getPublicUrl(filename);
+            return urlData.publicUrl;
+        }
+
+        // Upload each category file
         for (const category of categories) {
             if (req.files?.[category]?.[0]) {
                 const file = req.files[category][0];
-
-                // Get the file extension from the original filename
                 const ext = path.extname(file.originalname);
-                const newFilename = `setup_${category}${ext}`;
-                const newPath = path.join(setupImagesDir, newFilename);
+                const filename = `setup_${category}${ext}`;   // e.g. setup_shirt.jpg
+                const buffer = fs.readFileSync(file.path);
 
-                // Check if source file exists
-                if (!fs.existsSync(file.path)) {
-                    console.error(`Source file does not exist: ${file.path}`);
-                    throw new Error(`Source file missing for ${category}`);
-                }
+                savedUrls[category] = await uploadToStorage(buffer, file.mimetype, filename);
 
-                try {
-                    // Try rename first (faster)
-                    fs.renameSync(file.path, newPath);
-                    console.log(`Renamed ${category} to: ${newFilename}`);
-                } catch (renameError) {
-                    console.error(`Rename failed for ${category}, trying copy method:`, renameError);
-
-                    // Fallback: copy then delete
-                    try {
-                        const data = fs.readFileSync(file.path);
-                        fs.writeFileSync(newPath, data);
-                        if (fs.existsSync(file.path)) {
-                            fs.unlinkSync(file.path);
-                        }
-                        console.log(`Copied ${category} to: ${newFilename} (fallback method)`);
-                    } catch (copyError) {
-                        console.error(`Copy failed for ${category}:`, copyError);
-                        throw copyError;
-                    }
-                }
-
-                savedPaths[category] = `/setupImages/${newFilename}`;
+                // Clean up local temp file
+                fs.unlinkSync(file.path);
             }
         }
 
-        if (Object.keys(savedPaths).length === 0) {
+        if (Object.keys(savedUrls).length === 0) {
             return res.status(400).json({ message: 'At least one image is required.' });
         }
 
-        // --- NOW clear the setupImages folder of OLD files (not the ones we just saved) ---
-        if (fs.existsSync(setupImagesDir)) {
-            const files = fs.readdirSync(setupImagesDir);
-            for (const file of files) {
-                const filePath = path.join(setupImagesDir, file);
-                try {
-                    if (fs.statSync(filePath).isFile()) {
-                        // Check if this file is one of the ones we just saved
-                        const isNewFile = Object.values(savedPaths).some(
-                            savedPath => path.basename(savedPath) === file
-                        );
+        const { data: rows } = await supabase
+            .from('setup_image_master')
+            .select('setup_image_id')
+            .limit(1);
 
-                        // Only delete if it's NOT one of the newly saved files
-                        if (!isNewFile) {
-                            fs.unlinkSync(filePath);
-                            console.log(`Deleted old file: ${file}`);
-                        } else {
-                            console.log(`Keeping new file: ${file}`);
-                        }
-                    }
-                } catch (e) {
-                    console.error(`Error processing ${file}:`, e);
-                }
-            }
-            console.log('Old setup images cleaned up.');
-        }
-
-        // Check if a record already exists
-        const existing = await knex('setup_image_master').select('setup_image_id').first();
+        const existing = rows?.[0] ?? null;
 
         if (existing) {
-            // Update only the categories that were uploaded
-            await knex('setup_image_master')
-                .where({ setup_image_id: existing.setup_image_id })
-                .update({
-                    ...savedPaths,
-                    updated_at: new Date()
-                });
+            // Update only the uploaded categories
+            const { error: updateError } = await supabase
+                .from('setup_image_master')
+                .update({ ...savedUrls, updated_at: new Date() })
+                .eq('setup_image_id', existing.setup_image_id);
+
+            if (updateError) throw new Error(updateError.message);
         } else {
-            // Insert new record
-            await knex('setup_image_master').insert({
-                ...savedPaths,
-                created_at: new Date()
-            });
+            // Insert first-ever record
+            const { error: insertError } = await supabase
+                .from('setup_image_master')
+                .insert({ ...savedUrls, created_at: new Date() });
+
+            if (insertError) throw new Error(insertError.message);
         }
 
         return res.status(200).json({
             message: 'Setup images saved successfully.',
-            paths: savedPaths
+            paths: savedUrls
         });
 
     } catch (err) {
         console.error('Unable to save setup images:', err);
-        // Clean up uploaded files if there's an error
+        // Clean up any remaining temp files
         if (req.files) {
             Object.values(req.files).flat().forEach(file => {
-                if (file.path && fs.existsSync(file.path)) {
-                    try {
-                        fs.unlinkSync(file.path);
-                        console.log(`Cleaned up: ${file.path}`);
-                    } catch (e) {
-                        console.error('Error deleting temporary file:', e);
-                    }
-                }
+                if (file.path && fs.existsSync(file.path)) fs.unlinkSync(file.path);
             });
         }
-        return res.status(500).json({
-            message: 'Internal server error.',
-            error: err.message
-        });
+        return res.status(500).json({ message: 'Internal server error.', error: err.message });
     }
 });
 
 router.get('/get-all-setup', async (req, res, next) => {
     try {
-        const getAllSetup = await knex('setup_image_master').select('*');
-        res.json(getAllSetup)
+        const { data, error } = await supabase
+            .from('setup_image_master')
+            .select('*');
+
+        if (error) return res.status(500).json({ error: error.message });
+        res.json(data);
     } catch (err) {
-        console.log('Unable to fetch all setup: ', err)
+        console.error('Unable to fetch all setup:', err);
+        res.status(500).json({ message: 'Internal server error' });
     }
-})
+});
 
 
+
+
+
+
+
+router.post('/create-order', async (req, res, next) => {
+    try {
+        const {
+            items,
+            user_id,
+            sub_total,
+            shipping_fee,
+            total,
+            country,
+            email,
+            first_name,
+            last_name,
+            barangay,
+            street_address,
+            city,
+            postal_code,
+            region,
+            phone_number,
+            billing,
+            payment_method,
+        } = req.body;
+
+        // ── Validate ────────────────────────────────────────────────────
+        if (!Array.isArray(items) || items.length === 0) {
+            return res.status(400).json({ message: 'Order must contain at least one item.' });
+        }
+
+        const requiredFields = {
+            country, email, first_name, last_name, barangay,
+            street_address, city, postal_code, region, phone_number,
+        };
+        const missing = Object.entries(requiredFields)
+            .filter(([, v]) => v === undefined || v === null || String(v).trim() === '')
+            .map(([k]) => k);
+
+        if (missing.length > 0) {
+            return res.status(400).json({ message: `Missing required fields: ${missing.join(', ')}` });
+        }
+        if (sub_total === undefined || total === undefined) {
+            return res.status(400).json({ message: 'sub_total and total are required.' });
+        }
+
+        const now = new Date().toISOString();
+
+        // ── Insert order (items stored as JSON snapshot, no separate line-item table) ──
+        const { data: order, error: orderError } = await supabase
+            .from('order_master')
+            .insert({
+                items: JSON.stringify(items),
+                user_id: user_id || null,
+                sub_total,
+                shipping_fee: shipping_fee || 0,
+                total,
+                payment_method: payment_method || 'cod',
+                order_status: 'pending',
+                country,
+                email,
+                first_name,
+                last_name,
+                barangay,
+                street_address,
+                city,
+                postal_code,
+                region,
+                phone_number,
+                billing: billing || null,
+                created_by: user_id || null,
+                created_at: now,
+            })
+            .select('order_id')
+            .single();
+
+        if (orderError) {
+            console.error('Supabase insert error [order_master]:', orderError);
+            return res.status(500).json({ message: 'Failed to create order.', error: orderError.message });
+        }
+
+        return res.status(201).json({
+            message: 'Order placed successfully.',
+            order_id: order.order_id,
+        });
+
+    } catch (err) {
+        console.error('Unable to create order:', err);
+        return res.status(500).json({ message: 'Internal server error.', error: err.message });
+    }
+});
 module.exports = router;

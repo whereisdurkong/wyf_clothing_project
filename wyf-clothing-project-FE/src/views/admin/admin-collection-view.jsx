@@ -358,11 +358,9 @@ export default function AdminCollectionView() {
                     is_active: d.is_active ?? 1,
                 });
 
-                // Build the absolute URL for the existing image.
-                // Adjust the field name (d.collection_image) to match your API response.
+
                 if (d.collection_images) {
-                    const base = config.baseApi.replace("/api", "");
-                    setExistingImageUrl(`${base}${d.collection_images}`);
+                    setExistingImageUrl(d.collection_images);
                 }
             } catch (err) {
                 addNotif("Failed to load", "Could not fetch collection data.", "error");

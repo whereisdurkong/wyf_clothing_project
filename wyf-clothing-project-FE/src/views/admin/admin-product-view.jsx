@@ -577,15 +577,13 @@ export default function AdminProductView() {
         if (!product_id) { setError("No product ID provided."); setLoading(false); return; }
         const fetchData = async () => {
             try {
-                const [productRes, variantsRes, collectionsRes] = await Promise.all([
+                const [productRes, collectionsRes] = await Promise.all([
                     axios.get(`${config.baseApi}/product/get-product-by-id`, { params: { id: product_id } }),
-                    axios.get(`${config.baseApi}/product/get-all-product-variant`),
                     axios.get(`${config.baseApi}/product/get-all-collection`),
                 ]);
                 const pd = productRes.data;
-                const pv = variantsRes.data.filter(v => String(v.product_id) === String(product_id));
                 setProduct(pd);
-                setVariants(pv);
+                setVariants(pd.product_variant_master || []);   // ← from nested join
                 setCollections(collectionsRes.data || []);
             } catch (err) {
                 console.error(err);
@@ -610,7 +608,7 @@ export default function AdminProductView() {
             product_name: product.product_name || "",
             product_description: product.product_description || "",
             product_category: product.product_category || "",
-            product_collection: product.product_collection || "",
+            product_collection: product.product_collection_id || "",
             status: product.is_active ?? 1,
         });
         setEditVariants(variants.map(v => ({
@@ -724,12 +722,12 @@ export default function AdminProductView() {
             await axios.post(`${config.baseApi}/product/update-product`, fd, {
                 headers: { "Content-Type": "multipart/form-data" },
             });
-            const [productRes, variantsRes] = await Promise.all([
-                axios.get(`${config.baseApi}/product/get-product-by-id`, { params: { id: product_id } }),
-                axios.get(`${config.baseApi}/product/get-all-product-variant`),
-            ]);
+            const productRes = await axios.get(
+                `${config.baseApi}/product/get-product-by-id`,
+                { params: { id: product_id } }
+            );
             setProduct(productRes.data);
-            setVariants(variantsRes.data.filter(v => String(v.product_id) === String(product_id)));
+            setVariants(productRes.data.product_variant_master || []);
             addNotif("Changes saved", "Product updated successfully.", "success");
             setEditMode(false);
         } catch (err) {
@@ -757,6 +755,12 @@ export default function AdminProductView() {
     const outOfStockCount = variants.filter(v => (parseInt(v.product_variant_quantity) || 0) === 0).length;
 
     const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map(c => [c.value, c.label]));
+
+
+    const collectionLabel = collections.find(
+        c => String(c.collection_id) === String(product?.product_collection_id)
+    )?.collection_title || null;
+
 
     // ── Render ──
     if (saving) return <Loading />;
@@ -826,8 +830,7 @@ export default function AdminProductView() {
                                     <DetailRow label="Product ID" value={product.product_id} />
                                     <DetailRow label="Title" value={product.product_name} />
                                     <DetailRow label="Category" value={CATEGORY_LABELS[product.product_category] || product.product_category} />
-                                    <DetailRow label="Collection" value={product.product_collection || null} />
-                                    <DetailRow label="Created by" value={product.created_by} />
+                                    <DetailRow label="Collection" value={collectionLabel} />                                    <DetailRow label="Created by" value={product.created_by} />
                                     {product.created_at && (
                                         <DetailRow label="Date added"
                                             value={new Date(product.created_at).toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })}
@@ -986,9 +989,14 @@ export default function AdminProductView() {
                                 <Field label="Collection">
                                     <StyledSelect name="product_collection" value={form.product_collection} onChange={handleForm}>
                                         <option value="">— None —</option>
-                                        {collections.map(c => (
-                                            <option key={c.collection_title} value={c.collection_title}>{c.collection_title}</option>
-                                        ))}
+                                        {collections
+                                            .filter(c => String(c.is_active) === "1")
+                                            .map(c => (
+                                                <option key={c.collection_id} value={c.collection_id}>
+                                                    {c.collection_title}
+                                                </option>
+                                            ))
+                                        }
                                     </StyledSelect>
                                 </Field>
                                 <Field label="Category" required error={formErrors.product_category}>

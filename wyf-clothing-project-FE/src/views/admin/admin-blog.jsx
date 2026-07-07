@@ -32,8 +32,6 @@ export default function AdminBlog() {
     if (loading) return <p style={{ textAlign: "center" }}>Loading...</p>;
     if (!blogs.length) return <p style={{ textAlign: "center" }}>No blogs found.</p>;
 
-    const baseUrl = config.baseApi.replace('/api', '');
-
     return (
         <div style={{ padding: "150px 24px" }}>
             <h2 style={{
@@ -76,7 +74,7 @@ export default function AdminBlog() {
                             {/* Image */}
                             {imageUrl && (
                                 <img
-                                    src={`${baseUrl}/${imageUrl}`}
+                                    src={imageUrl}
                                     alt={blog.title}
                                     style={{
                                         width: "100%",
@@ -118,7 +116,7 @@ export default function AdminBlog() {
 
                             {/* Read more */}
                             <a
-                                href={`/blog/${blog.blog_id}`}
+                                href={`/blog-view?id=${blog.blog_id}`}
                                 style={{
                                     fontSize: "0.85rem",
                                     color: "#111",

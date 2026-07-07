@@ -213,7 +213,7 @@ export default function ShopBlog() {
                         <img
                             key={i}
                             className={`img-${i}`}
-                            src={`${baseUrl}/${imgPath}`}
+                            src={imgPath}
                             alt={`${blog.title} ${i + 1}`}
                             onError={(e) => { e.target.style.display = 'none'; }}
                         />

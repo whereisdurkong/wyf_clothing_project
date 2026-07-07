@@ -71,7 +71,7 @@ export default function ShopBlogThree() {
                             {/* Image */}
                             {imageUrl && (
                                 <img
-                                    src={`${baseUrl}/${imageUrl}`}
+                                    src={imageUrl}
                                     alt={blog.title}
                                     style={{
                                         width: "100%",
